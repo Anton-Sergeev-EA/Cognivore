@@ -98,3 +98,16 @@ def test_index_page_served(client: TestClient) -> None:
     res = client.get("/")
     assert res.status_code == 200
     assert b"Cognivore" in res.content
+
+
+def test_static_assets_are_not_cached(client: TestClient) -> None:
+    # Regression test for a real bug found live: plain StaticFiles sends no
+    # Cache-Control header, so a browser can go on serving an old cached
+    # copy of app.js/i18n.js/etc. after the file on disk (and its
+    # Last-Modified) has changed -- a UI update landed on the server but
+    # stayed invisible in an already-open browser, indistinguishable from
+    # the deploy having silently failed. Every static response must tell
+    # the browser not to do that.
+    for path in ("/", "/app.js", "/i18n.js", "/styles.css"):
+        res = client.get(path)
+        assert res.headers.get("cache-control") == "no-store", path

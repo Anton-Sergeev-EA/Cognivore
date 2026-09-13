@@ -15,6 +15,8 @@ from pathlib import Path
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.staticfiles import StaticFiles
 from sse_starlette.sse import EventSourceResponse
+from starlette.responses import Response
+from starlette.types import Scope
 
 from cognivore.bootstrap import build_agent, build_document_store
 from cognivore.config import Settings, get_settings
@@ -33,6 +35,26 @@ logger = logging.getLogger(__name__)
 
 _STATIC_DIR = Path(__file__).parent / "static"
 _STORE_SUBDIR = "store"
+
+
+class _NoCacheStaticFiles(StaticFiles):
+    """Plain ``StaticFiles`` sends no ``Cache-Control`` header at all, which
+    leaves browsers free to apply their own heuristic caching -- and Chrome
+    in particular can keep serving an old cached copy of e.g. ``app.js``
+    for a long time after the file on disk (and its Last-Modified) has
+    changed, with no error and nothing in the page to reveal it happened.
+    Real-world impact of that: a UI change deployed to the server was
+    invisible in an already-open browser even after a normal reload, and
+    looked indistinguishable from the deploy having silently failed. Since
+    this is a locally-run app rather than something served at CDN scale,
+    trading away caching entirely is the right tradeoff -- a live demo
+    should never be one browser-cache quirk away from showing stale UI.
+    """
+
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
 
 def _load_or_build_store(settings: Settings) -> DocumentStore:
@@ -242,6 +264,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"analysis": analysis}
 
     if _STATIC_DIR.exists():
-        app.mount("/", StaticFiles(directory=_STATIC_DIR, html=True), name="static")
+        app.mount("/", _NoCacheStaticFiles(directory=_STATIC_DIR, html=True), name="static")
 
     return app
