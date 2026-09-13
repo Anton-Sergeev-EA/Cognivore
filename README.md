@@ -64,7 +64,7 @@ dependencies are missing) are implemented rather than imported.
   interface (no build step, no framework) with file/audio/video
   drag-and-drop, live "thinking"/connection indicators, dark/light/aurora
   themes, and localization into English, Russian, German, French,
-  Italian, and Spanish.
+  Italian, Spanish, Simplified Chinese, Japanese, and Hindi.
 - Full test suite, ruff lint+format, mypy (strict-ish, including a stub for
   the native extension), and a multi-OS/multi-Python CI matrix.
 
