@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import importlib.util
 import logging
+import os
 
 from cognivore.agent.core import Agent
 from cognivore.agent.memory import ConversationBuffer, VectorMemory
@@ -36,6 +37,7 @@ def _build_ollama_backend(settings: Settings) -> LLMBackend | None:
             host=settings.ollama_host,
             model=settings.ollama_model,
             request_timeout=settings.ollama_request_timeout,
+            num_thread=settings.llm_n_threads or os.cpu_count(),
         )
     except OllamaUnavailableError as exc:
         logger.info("Ollama is running but unusable (%s); trying the next backend.", exc)

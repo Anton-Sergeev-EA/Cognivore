@@ -79,6 +79,38 @@ def test_ollama_backend_generate_extracts_message_content() -> None:
     assert answer == "42"
 
 
+def test_ollama_backend_sends_num_thread_when_set() -> None:
+    response_payload = json.dumps({"message": {"role": "assistant", "content": "42"}}).encode()
+    captured_requests = []
+
+    def fake_urlopen(req, timeout=None):
+        captured_requests.append(req)
+        return _FakeResponse(response_payload)
+
+    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        backend = OllamaBackend(host="http://127.0.0.1:11434", model="qwen2.5:3b", num_thread=8)
+        backend.generate([ChatMessage(role="user", content="hi")], GenerationConfig())
+
+    sent_body = json.loads(captured_requests[0].data)
+    assert sent_body["options"]["num_thread"] == 8
+
+
+def test_ollama_backend_omits_num_thread_when_not_set() -> None:
+    response_payload = json.dumps({"message": {"role": "assistant", "content": "42"}}).encode()
+    captured_requests = []
+
+    def fake_urlopen(req, timeout=None):
+        captured_requests.append(req)
+        return _FakeResponse(response_payload)
+
+    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        backend = OllamaBackend(host="http://127.0.0.1:11434", model="qwen2.5:3b")
+        backend.generate([ChatMessage(role="user", content="hi")], GenerationConfig())
+
+    sent_body = json.loads(captured_requests[0].data)
+    assert "num_thread" not in sent_body["options"]
+
+
 def test_ollama_backend_stream_yields_content_chunks() -> None:
     lines = [
         json.dumps({"message": {"content": "The "}, "done": False}).encode() + b"\n",
