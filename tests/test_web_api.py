@@ -48,6 +48,34 @@ def test_ingest_file_then_chat_finds_it(client: TestClient) -> None:
     assert any("banana42" in c["text"] for c in kb)
 
 
+def test_chat_stream_delivers_the_final_answer(client: TestClient) -> None:
+    with client.stream("GET", "/api/chat/stream", params={"message": "What is 3 * 3?"}) as res:
+        body = res.read().decode()
+    assert "answer_chunk" in body
+    assert "9" in body
+
+
+def test_chat_stream_delivers_answer_even_without_a_final_answer_marker(client: TestClient) -> None:
+    # Regression test for a real bug found live: a real model doesn't
+    # always use the literal "Final Answer:" marker (sometimes it just
+    # answers directly). run_stream still recognizes that as the final
+    # answer, but nothing was ever streamed live for it -- without a
+    # fallback in the SSE bridge, that answer silently never reached the
+    # client at all.
+    class _DirectAnswerLLM:
+        def generate(self, messages, config):
+            return "Hello there"
+
+        def stream(self, messages, config):
+            yield "Hello there"
+
+    client.app.state.agent.llm = _DirectAnswerLLM()
+
+    with client.stream("GET", "/api/chat/stream", params={"message": "hi"}) as res:
+        body = res.read().decode()
+    assert "Hello there" in body
+
+
 def test_ingest_file_rejects_non_utf8(client: TestClient) -> None:
     files = {"file": ("bad.bin", b"\xff\xfe\x00\x01", "application/octet-stream")}
     res = client.post("/api/ingest/file", files=files)
