@@ -51,3 +51,11 @@ project uses [Semantic Versioning](https://semver.org/).
   no C compiler by design. Switched to `[audio,video]`; the documented
   Docker paths (compose, or a single container + host Ollama) talk to
   Ollama over HTTP and never needed llama-cpp-python in the image at all.
+- `docker-compose.yml`: the bundled `ollama` service published port
+  11434 to the host -- confirmed live, this fails outright with "address
+  already in use" for anyone (a very ordinary case, not an edge case)
+  who already has a native Ollama install running, which is the same
+  port. Nothing in the documented workflow (`docker compose exec ollama
+  ollama pull ...`, or `cognivore` reaching it as `http://ollama:11434`
+  over the compose network) actually needed that port published to the
+  host at all, so the mapping is simply gone rather than moved.
