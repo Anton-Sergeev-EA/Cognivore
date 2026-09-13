@@ -41,3 +41,13 @@ project uses [Semantic Versioning](https://semver.org/).
   the image and smoke-tests it (health endpoint, `HEALTHCHECK` status,
   non-root) on every push; tagged releases publish a multi-arch
   (amd64/arm64) image to GHCR via `docker-publish.yml`.
+
+### Fixed
+
+- Docker image build: the runtime stage installed the `[all]` extra,
+  which pulls in `llama-cpp-python` -- confirmed live, this has no
+  prebuilt wheel for some platform/Python combinations and falls back to
+  compiling from source, which fails outright in that stage since it has
+  no C compiler by design. Switched to `[audio,video]`; the documented
+  Docker paths (compose, or a single container + host Ollama) talk to
+  Ollama over HTTP and never needed llama-cpp-python in the image at all.

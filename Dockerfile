@@ -22,13 +22,28 @@ LABEL org.opencontainers.image.title="cognivore" \
 
 WORKDIR /app
 COPY --from=builder /build/dist/*.whl /tmp/
-# `[all]` pulls in the audio/video/llm extras; drop it for a smaller image
-# if you only need the RAG + web chat surface without local media tools.
+# Deliberately `[audio,video]`, not `[all]`. `[all]` also pulls in `llm`
+# (llama-cpp-python), which -- confirmed live, not hypothetical -- has no
+# prebuilt wheel for every platform/Python combination and falls back to
+# compiling from source via CMake/scikit-build-core. This runtime stage
+# has no compiler (that's the whole point of the multi-stage build), so
+# that install fails outright rather than just being slow.
+#
+# This isn't a real loss: the documented ways to run this image (compose,
+# or a single container pointed at a host Ollama) both talk to Ollama
+# over plain HTTP, which needs no native code in this image at all.
+# llama-cpp-python is for loading a GGUF file *in-process* instead --
+# a valid choice on bare metal, but a poor fit for "one image, any OS,
+# any CPU," since it means compiling (or shipping a prebuilt wheel for)
+# every target architecture. Add `build-essential` back to this stage
+# and switch to `[all]` below if you specifically want that instead of
+# Ollama.
 # (Resolving the glob into a variable first, rather than writing
-# `/tmp/*.whl[all]` directly, avoids the shell parsing `[all]` itself as a
-# glob character class appended to the wildcard.)
+# `/tmp/*.whl[audio,video]` directly, avoids the shell parsing the
+# brackets themselves as a glob character class appended to the
+# wildcard.)
 RUN WHEEL="$(ls /tmp/*.whl)" \
-    && pip install --no-cache-dir "${WHEEL}[all]" \
+    && pip install --no-cache-dir "${WHEEL}[audio,video]" \
     && rm -f /tmp/*.whl
 
 ENV COGNIVORE_HOST=0.0.0.0 \
