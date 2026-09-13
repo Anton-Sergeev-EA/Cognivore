@@ -33,10 +33,14 @@ class RagSearchTool(Tool):
     def __init__(self, store: DocumentStore) -> None:
         self.store = store
 
-    def run(self, query: str = "", top_k: int = 5, **_: object) -> str:
+    def run(self, query: str = "", top_k: int = 5, _user_input: str = "", **_: object) -> str:
         if len(self.store) == 0:
             return "The knowledge base is empty. No documents have been ingested yet."
-        hits = self.store.search(query, top_k=top_k)
+        # Also try the user's own, unmodified wording of the question --
+        # see DocumentStore.search_multi for why: the model's own `query`
+        # is sometimes translated/rewritten in a way that no longer
+        # lexically matches the ingested documents.
+        hits = self.store.search_multi([query, _user_input], top_k=top_k)
         if not hits:
             return "No relevant passages found."
         lines = []

@@ -100,6 +100,36 @@ def test_run_stream_emits_trace_before_streaming_the_final_answer() -> None:
     assert finals[0].answer.strip() == "42"
 
 
+def test_agent_falls_back_to_users_own_wording_when_model_translates_the_query() -> None:
+    # Simulate what was actually observed with a real local model: it
+    # rewrites/translates the search query it gives the tool rather than
+    # reusing the user's own words. The RAG search tool should still find
+    # the answer by also trying the original, untranslated question.
+    store = DocumentStore(embedder=HashingEmbedder(dim=64))
+    store.add_text(
+        "Возврат средств возможен в течение 14 дней с момента оплаты.",  # noqa: RUF001
+        source="policy.md",
+    )
+    tools = ToolRegistry([RagSearchTool(store)])
+
+    class _TranslatingFakeLLM:
+        def generate(self, messages, config):
+            last_user = messages[-1].content
+            if last_user.startswith("Observation:"):
+                return f"Thought: done.\nFinal Answer: {last_user[len('Observation:') :].strip()}"
+            return (
+                "Thought: translating for the search.\nAction: search_knowledge_base\n"
+                'Action Input: {"query": "refund policy within a week of payment"}'
+            )
+
+        def stream(self, messages, config):
+            yield self.generate(messages, config)
+
+    agent = Agent(llm=_TranslatingFakeLLM(), tools=tools)
+    result = agent.run("Какой возврат средств в первую неделю после оплаты?")
+    assert "14 дней" in result.answer
+
+
 def test_run_stream_does_not_leak_raw_react_syntax_into_answer_deltas() -> None:
     # A tool-call step's raw completion (e.g. 'Action: calculator\n...')
     # must never appear in an answer_delta -- only text from a genuine

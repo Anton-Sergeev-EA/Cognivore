@@ -46,3 +46,32 @@ def test_list_chunks_returns_all_chunks(document_store: DocumentStore) -> None:
     document_store.add_text("Another short document.", source="b.md")
     chunks = document_store.list_chunks()
     assert {c["source"] for c in chunks} == {"a.md", "b.md"}
+
+
+def test_search_multi_finds_hit_from_second_query_when_first_matches_nothing(
+    document_store: DocumentStore,
+) -> None:
+    document_store.add_text(
+        "Python is a popular programming language for data science and machine learning.",
+        source="doc1.md",
+    )
+    # The first query shares no words with the ingested text at all (this
+    # is standing in for a model translating the query into another
+    # language); only the second, closer to the document's own wording,
+    # should be able to find it.
+    results = document_store.search_multi(
+        ["zzz completely unrelated gibberish", "machine learning programming"], top_k=1
+    )
+    assert len(results) == 1
+    assert results[0].source == "doc1.md"
+
+
+def test_search_multi_deduplicates_and_keeps_best_score(document_store: DocumentStore) -> None:
+    document_store.add_text(
+        "Python is a popular programming language for data science and machine learning.",
+        source="doc1.md",
+    )
+    results = document_store.search_multi(
+        ["machine learning programming", "machine learning programming"], top_k=5
+    )
+    assert len({r.id for r in results}) == len(results)

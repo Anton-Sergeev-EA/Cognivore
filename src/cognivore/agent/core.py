@@ -82,7 +82,7 @@ class Agent:
                 self._remember_turn(user_input, answer)
                 return AgentResult(answer=answer, trace=trace)
 
-            observation = self._dispatch(step)
+            observation = self._dispatch(step, user_input=user_input)
             trace.append(TraceEntry(step.thought, step.action, step.action_input, observation))
             messages.append(ChatMessage(role="assistant", content=completion))
             messages.append(ChatMessage(role="user", content=f"Observation: {observation}"))
@@ -139,7 +139,7 @@ class Agent:
                 yield ("final", AgentResult(answer=answer, trace=trace))
                 return
 
-            observation = self._dispatch(step)
+            observation = self._dispatch(step, user_input=user_input)
             entry = TraceEntry(step.thought, step.action, step.action_input, observation)
             trace.append(entry)
             yield ("trace", entry)
@@ -180,7 +180,7 @@ class Agent:
                     yield ("answer_delta", already_streamed)
         return buffer
 
-    def _dispatch(self, step: AgentStep) -> str:
+    def _dispatch(self, step: AgentStep, user_input: str = "") -> str:
         if step.action is None:
             return "Error: no action specified."
         tool = self.tools.get(step.action)
@@ -188,7 +188,15 @@ class Agent:
             available = ", ".join(self.tools.names())
             return f"Error: unknown tool '{step.action}'. Available tools: {available}"
         try:
-            return tool.run(**step.action_input)
+            # Every tool accepts and ignores unknown kwargs, so this is safe
+            # to pass unconditionally. It exists so a tool like
+            # RagSearchTool can fall back to the user's own wording of the
+            # question when the model rewrites (e.g. translates) its own
+            # "query" argument into something that no longer lexically
+            # matches the ingested documents -- a real, observed failure
+            # mode with small local models, not a hypothetical one.
+            call_kwargs = {**step.action_input, "_user_input": user_input}
+            return tool.run(**call_kwargs)
         except Exception as exc:
             return f"Error running tool '{step.action}': {exc}"
 
