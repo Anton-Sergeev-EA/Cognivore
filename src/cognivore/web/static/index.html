@@ -9,51 +9,63 @@
 <body>
   <div class="shell">
     <aside class="sidebar">
-      <div class="brand">
-        <span class="brand-mark">◈</span>
-        <span class="brand-name">Cognivore</span>
+      <div class="brand-row">
+        <div class="brand">
+          <span class="brand-mark">◈</span>
+          <span class="brand-name">Cognivore</span>
+        </div>
+        <select id="lang-select" class="lang-select" aria-label="Language"></select>
       </div>
-      <p class="tagline">Local-first agent · RAG · audio · video</p>
+      <p class="tagline" data-i18n="tagline">Local-first agent · RAG · audio · video</p>
 
       <section class="panel">
-        <h2>Status</h2>
+        <h2 data-i18n="statusTitle">Status</h2>
         <dl id="status-list" class="status-list">
-          <dt>backend</dt><dd id="status-backend">…</dd>
-          <dt>native index</dt><dd id="status-native">…</dd>
-          <dt>tools</dt><dd id="status-tools">…</dd>
+          <dt data-i18n="statusBackendLabel">backend</dt><dd id="status-backend">…</dd>
+          <dt data-i18n="statusNativeLabel">native index</dt><dd id="status-native">…</dd>
+          <dt data-i18n="statusToolsLabel">tools</dt><dd id="status-tools">…</dd>
         </dl>
       </section>
 
       <section class="panel">
-        <h2>Knowledge base</h2>
+        <h2 data-i18n="kbTitle">Knowledge base</h2>
         <label class="dropzone" for="file-input">
           <input id="file-input" type="file" accept=".txt,.md,.markdown" hidden />
-          Drop a .txt/.md file or click to ingest
+          <span data-i18n="kbDropzone">Drop a .txt/.md file or click to ingest</span>
         </label>
         <div id="kb-status" class="muted"></div>
       </section>
 
       <section class="panel">
-        <h2>Media tools</h2>
+        <h2 data-i18n="mediaTitle">Media tools</h2>
         <label class="dropzone small" for="audio-input">
           <input id="audio-input" type="file" accept="audio/*" hidden />
-          Transcribe audio
+          <span data-i18n="mediaAudio">Transcribe audio</span>
         </label>
         <label class="dropzone small" for="video-input">
           <input id="video-input" type="file" accept="video/*" hidden />
-          Analyze video
+          <span data-i18n="mediaVideo">Analyze video</span>
         </label>
+      </section>
+
+      <section class="panel contact-panel">
+        <h2 data-i18n="contactTitle">Contact</h2>
+        <div class="contact-block">
+          <div class="contact-name">Sergeev Anton</div>
+          <a class="contact-email" href="mailto:avsergeev1981@gmail.com">avsergeev1981@gmail.com</a>
+        </div>
       </section>
     </aside>
 
     <main class="chat">
       <div id="messages" class="messages"></div>
       <form id="chat-form" class="composer">
-        <textarea id="chat-input" placeholder="Ask Cognivore anything…" rows="1"></textarea>
-        <button type="submit">Send</button>
+        <textarea id="chat-input" data-i18n-placeholder="chatPlaceholder" placeholder="Ask Cognivore anything…" rows="1"></textarea>
+        <button type="submit" data-i18n="chatSend">Send</button>
       </form>
     </main>
   </div>
+  <script src="/i18n.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

@@ -26,3 +26,6 @@ project uses [Semantic Versioning](https://semver.org/).
 - Full test suite (pytest), lint/format (ruff), static typing (mypy, with a
   hand-written `.pyi` stub for the native extension), and a multi-OS/
   multi-Python CI matrix (GitHub Actions).
+- Web UI localization: a language switcher (English, Russian, German,
+  French, Italian, Spanish) covering all interface copy, with the choice
+  remembered per browser.

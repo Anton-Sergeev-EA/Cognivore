@@ -51,9 +51,22 @@ body {
   gap: 20px;
 }
 
+.brand-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .brand { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 600; }
 .brand-mark { color: var(--accent); font-size: 20px; }
 .tagline { color: var(--muted); margin: -8px 0 0; font-size: 12px; }
+
+.lang-select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 4px 6px;
+  font-size: 12px;
+  cursor: pointer;
+  max-width: 92px;
+}
+.lang-select:hover { border-color: var(--accent); }
 
 .panel h2 {
   font-size: 11px;
@@ -82,6 +95,12 @@ body {
 .dropzone.small { padding: 10px; margin-top: 8px; }
 
 .muted { color: var(--muted); font-size: 12px; margin-top: 8px; min-height: 1em; }
+
+.contact-panel { margin-top: auto; }
+.contact-block { font-size: 12px; }
+.contact-name { color: var(--text); font-weight: 600; }
+.contact-email { color: var(--accent); text-decoration: none; word-break: break-all; }
+.contact-email:hover { text-decoration: underline; }
 
 .chat {
   flex: 1;
