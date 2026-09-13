@@ -43,10 +43,23 @@ def list_ollama_models(host: str, timeout: float = 2.0) -> list[str]:
 
 
 class OllamaBackend:
-    def __init__(self, host: str, model: str | None = None, request_timeout: float = 600.0) -> None:
+    def __init__(
+        self,
+        host: str,
+        model: str | None = None,
+        request_timeout: float = 600.0,
+        num_thread: int | None = None,
+    ) -> None:
         self.host = host.rstrip("/")
         self.request_timeout = request_timeout
         self.model = model or self._pick_default_model()
+        # Ollama's own auto-detected thread count can be conservative (e.g.
+        # picking 2 threads on a 12-core laptop); explicitly passing the
+        # CPU count gives CPU-only inference a real speed boost for free.
+        # None means "don't send it, let Ollama decide" -- kept overridable
+        # rather than hardcoded so a shared/constrained machine can still
+        # cap it via COGNIVORE_LLM_N_THREADS.
+        self.num_thread = num_thread
 
     def _pick_default_model(self) -> str:
         models = list_ollama_models(self.host)
@@ -71,13 +84,22 @@ class OllamaBackend:
     def _to_ollama_messages(self, messages: list[ChatMessage]) -> list[dict[str, str]]:
         return [{"role": m.role, "content": m.content} for m in messages]
 
+    def _options(self, config: GenerationConfig) -> dict[str, object]:
+        options: dict[str, object] = {
+            "temperature": config.temperature,
+            "num_predict": config.max_tokens,
+        }
+        if self.num_thread is not None:
+            options["num_thread"] = self.num_thread
+        return options
+
     def generate(self, messages: list[ChatMessage], config: GenerationConfig) -> str:
         result = self._post(
             {
                 "model": self.model,
                 "messages": self._to_ollama_messages(messages),
                 "stream": False,
-                "options": {"temperature": config.temperature, "num_predict": config.max_tokens},
+                "options": self._options(config),
             }
         )
         return result.get("message", {}).get("content", "")
@@ -88,7 +110,7 @@ class OllamaBackend:
                 "model": self.model,
                 "messages": self._to_ollama_messages(messages),
                 "stream": True,
-                "options": {"temperature": config.temperature, "num_predict": config.max_tokens},
+                "options": self._options(config),
             }
         ).encode("utf-8")
         req = urllib.request.Request(
