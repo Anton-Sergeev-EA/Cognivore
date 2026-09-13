@@ -100,9 +100,50 @@ Audio/video tools need their own extras: `pip install -e ".[audio,video]"`
 
 ### Docker
 
+The image is a multi-stage build (compiles the native C++ extension, then
+discards the compiler for a slim runtime image), runs as a non-root user,
+and ships a `HEALTHCHECK` -- built once with GitHub Actions' Docker layer
+caching and verified end-to-end (server actually answers `/api/health`,
+container reports `healthy`, runs as non-root) on every push, so it isn't
+just "builds," it's checked.
+
+**Easiest path -- no Python, no Ollama install, works the same on Windows,
+macOS, and Linux:**
+
+```bash
+docker compose up -d --build
+docker compose exec ollama ollama pull qwen2.5:3b   # one-time, ~2GB
+```
+
+Then open <http://127.0.0.1:8420>. `docker-compose.yml` runs Ollama
+*inside* its own container too, so there's nothing to install on the host
+beyond Docker itself; Cognivore reaches it over the compose network by
+service name (`http://ollama:11434`), which sidesteps the usual
+host-networking differences between Windows/macOS/Linux entirely. Without
+that one-time `ollama pull`, Cognivore still starts and runs fine -- it
+just falls back to the offline `FakeLLMBackend` demo mode until a model is
+available.
+
+**Already have Ollama running on the host, or want a single container?**
+
 ```bash
 docker build -t cognivore .
-docker run -p 8420:8420 -v cognivore-data:/data cognivore
+docker run -d -p 8420:8420 -v cognivore-data:/data \
+  -e COGNIVORE_OLLAMA_HOST=http://host.docker.internal:11434 \
+  --add-host=host.docker.internal:host-gateway \
+  cognivore
+```
+
+`host.docker.internal` is provided automatically on Docker Desktop
+(Windows/macOS); the explicit `--add-host` above is what makes the same
+command also work on plain Linux, where it otherwise doesn't resolve.
+
+**Prebuilt image (no build step at all):** tagged releases are published
+multi-arch (amd64 + arm64 -- Apple Silicon and Raspberry Pi included) to
+GHCR by [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml):
+
+```bash
+docker pull ghcr.io/anton-sergeev-ea/cognivore:latest
 ```
 
 ## Benchmarks
