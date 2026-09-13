@@ -27,8 +27,8 @@ project uses [Semantic Versioning](https://semver.org/).
   hand-written `.pyi` stub for the native extension), and a multi-OS/
   multi-Python CI matrix (GitHub Actions).
 - Web UI localization: a language switcher (English, Russian, German,
-  French, Italian, Spanish) covering all interface copy, with the choice
-  remembered per browser.
+  French, Italian, Spanish, Simplified Chinese, Japanese, Hindi) covering
+  all interface copy, with the choice remembered per browser.
 - Web UI theming (dark/light/aurora) and small live interactions: a
   working drag-and-drop for the knowledge-base/audio/video dropzones, an
   animated "thinking" indicator while the agent is working, a pulsing

@@ -124,7 +124,7 @@ body {
   padding: 4px 6px;
   font-size: 12px;
   cursor: pointer;
-  max-width: 92px;
+  max-width: 104px;
 }
 .lang-select:hover { border-color: var(--accent); }
 
