@@ -18,6 +18,7 @@ from sse_starlette.sse import EventSourceResponse
 from cognivore.bootstrap import build_agent, build_document_store
 from cognivore.config import Settings, get_settings
 from cognivore.index import is_native
+from cognivore.rag.store import DocumentStore
 from cognivore.web.schemas import (
     ChatRequest,
     ChatResponse,
@@ -30,6 +31,26 @@ from cognivore.web.schemas import (
 logger = logging.getLogger(__name__)
 
 _STATIC_DIR = Path(__file__).parent / "static"
+_STORE_SUBDIR = "store"
+
+
+def _load_or_build_store(settings: Settings) -> DocumentStore:
+    """Restores the knowledge base saved by a previous run, if any, so
+    ingested documents survive a server restart (e.g. after changing
+    ``.env`` to point at a real LLM). Falls back to a fresh store if
+    nothing was saved yet, or if the saved store doesn't match the current
+    embedder configuration.
+    """
+    store_dir = settings.data_dir / _STORE_SUBDIR
+    if (store_dir / "meta.json").exists():
+        try:
+            embedder = build_document_store(settings).embedder
+            store = DocumentStore.load(store_dir, embedder=embedder)
+            logger.info("Restored knowledge base from %s (%d chunks).", store_dir, len(store))
+            return store
+        except Exception:
+            logger.warning("Could not restore saved knowledge base; starting fresh.", exc_info=True)
+    return build_document_store(settings)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -38,18 +59,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="Cognivore", version="0.1.0")
 
-    store = build_document_store(settings)
+    store = _load_or_build_store(settings)
     agent = build_agent(settings, store=store, include_media=True)
 
     app.state.settings = settings
     app.state.store = store
     app.state.agent = agent
 
+    def _persist_store() -> None:
+        try:
+            store.save(settings.data_dir / _STORE_SUBDIR)
+        except OSError:
+            logger.warning("Failed to persist knowledge base.", exc_info=True)
+
     @app.get("/api/health", response_model=HealthResponse)
     def health() -> HealthResponse:
         return HealthResponse(
             status="ok",
             llm_backend=type(agent.llm).__name__,
+            llm_model=getattr(agent.llm, "model", None),
             native_index=is_native,
             tools=agent.tools.names(),
             knowledge_base_chunks=len(store),
@@ -107,6 +135,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             chunk_size=settings.chunk_size,
             chunk_overlap=settings.chunk_overlap,
         )
+        _persist_store()
         return IngestResponse(source=source, chunks_added=len(ids), total_chunks=len(store))
 
     @app.post("/api/ingest/file", response_model=IngestResponse)
@@ -124,6 +153,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             chunk_size=settings.chunk_size,
             chunk_overlap=settings.chunk_overlap,
         )
+        _persist_store()
         return IngestResponse(
             source=file.filename or "upload", chunks_added=len(ids), total_chunks=len(store)
         )

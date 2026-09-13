@@ -22,19 +22,77 @@ from cognivore.tools.rag_search import RagSearchTool
 logger = logging.getLogger(__name__)
 
 
-def build_llm_backend(settings: Settings) -> LLMBackend:
-    if settings.llm_model_path:
-        from cognivore.llm.llama_cpp_backend import LlamaCppBackend
+def _build_ollama_backend(settings: Settings) -> LLMBackend | None:
+    from cognivore.llm.ollama_backend import (
+        OllamaBackend,
+        OllamaUnavailableError,
+        is_ollama_running,
+    )
 
-        logger.info("Loading local LLM from %s", settings.llm_model_path)
-        return LlamaCppBackend(
-            model_path=settings.llm_model_path,
-            n_ctx=settings.llm_context_length,
-            n_threads=settings.llm_n_threads,
+    if not is_ollama_running(settings.ollama_host):
+        return None
+    try:
+        backend = OllamaBackend(host=settings.ollama_host, model=settings.ollama_model)
+    except OllamaUnavailableError as exc:
+        logger.info("Ollama is running but unusable (%s); trying the next backend.", exc)
+        return None
+    logger.info("Using Ollama at %s with model '%s'.", settings.ollama_host, backend.model)
+    return backend
+
+
+def _build_llama_cpp_backend(settings: Settings) -> LLMBackend | None:
+    if not settings.llm_model_path:
+        return None
+    from cognivore.llm.llama_cpp_backend import LlamaCppBackend
+
+    logger.info("Loading local LLM from %s", settings.llm_model_path)
+    return LlamaCppBackend(
+        model_path=settings.llm_model_path,
+        n_ctx=settings.llm_context_length,
+        n_threads=settings.llm_n_threads,
+    )
+
+
+def build_llm_backend(settings: Settings) -> LLMBackend:
+    provider = settings.llm_provider.lower()
+
+    if provider == "fake":
+        return FakeLLMBackend()
+
+    if provider == "ollama":
+        backend = _build_ollama_backend(settings)
+        if backend is not None:
+            return backend
+        logger.warning(
+            "COGNIVORE_LLM_PROVIDER=ollama but no Ollama server was reachable at %s; falling "
+            "back to FakeLLMBackend.",
+            settings.ollama_host,
         )
+        return FakeLLMBackend()
+
+    if provider == "llama_cpp":
+        backend = _build_llama_cpp_backend(settings)
+        if backend is not None:
+            return backend
+        logger.warning(
+            "COGNIVORE_LLM_PROVIDER=llama_cpp but COGNIVORE_LLM_MODEL_PATH is not set; falling "
+            "back to FakeLLMBackend."
+        )
+        return FakeLLMBackend()
+
+    # "auto" (the default): prefer whatever needs the least setup from the
+    # user. A running Ollama server means real local models with zero
+    # download managed by this project; a configured GGUF path is the next
+    # best thing; otherwise fall back to the deterministic offline backend
+    # rather than failing to start.
+    for builder in (_build_ollama_backend, _build_llama_cpp_backend):
+        backend = builder(settings)
+        if backend is not None:
+            return backend
     logger.warning(
-        "COGNIVORE_LLM_MODEL_PATH is not set; using FakeLLMBackend (deterministic offline demo "
-        "mode). Point it at a local GGUF model to use a real LLM."
+        "No local LLM found (no Ollama server running, no COGNIVORE_LLM_MODEL_PATH set); using "
+        "FakeLLMBackend (deterministic offline demo mode). Run `ollama serve` with a model "
+        "pulled, or point COGNIVORE_LLM_MODEL_PATH at a GGUF file, for real responses."
     )
     return FakeLLMBackend()
 

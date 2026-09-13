@@ -18,15 +18,31 @@ class Settings(BaseSettings):
     data_dir: Path = Field(default=Path("./.cognivore"), description="Local data directory")
 
     # -- LLM -----------------------------------------------------------
+    llm_provider: str = Field(
+        default="auto",
+        description="'auto' (try Ollama, then a GGUF model, then FakeLLMBackend), 'ollama', "
+        "'llama_cpp', or 'fake'.",
+    )
     llm_model_path: str | None = Field(
         default=None,
-        description="Path to a local GGUF model for llama-cpp-python. If unset, the CLI/API "
-        "fall back to a deterministic FakeLLMBackend useful for demos and tests.",
+        description="Path to a local GGUF model for llama-cpp-python. Used when llm_provider "
+        "is 'llama_cpp', or by 'auto' if Ollama isn't reachable.",
     )
     llm_context_length: int = Field(default=4096, ge=512)
     llm_n_threads: int | None = Field(default=None, description="CPU threads; None = auto")
     llm_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
     llm_max_tokens: int = Field(default=512, ge=1)
+
+    # Ollama (https://ollama.com) is the easiest way most people run a local
+    # LLM -- if it's already installed and serving, 'auto' uses it with zero
+    # extra download or config, which matters a lot more in practice than
+    # which inference engine is "more native" to this project.
+    ollama_host: str = Field(default="http://127.0.0.1:11434")
+    ollama_model: str | None = Field(
+        default=None,
+        description="Model name to request from Ollama (e.g. 'qwen2.5:3b'). If unset, 'auto' "
+        "asks Ollama for whatever models are already pulled and uses the first one.",
+    )
 
     # -- Embeddings ------------------------------------------------------
     embedding_model: str = Field(default="BAAI/bge-small-en-v1.5")

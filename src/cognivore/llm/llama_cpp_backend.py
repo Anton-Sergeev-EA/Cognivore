@@ -9,6 +9,7 @@ https://huggingface.co/models?library=gguf.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
 
 from cognivore.llm.base import ChatMessage, GenerationConfig
 
@@ -32,6 +33,11 @@ class LlamaCppBackend:
             n_threads=n_threads,  # None lets llama.cpp auto-detect available cores
             verbose=False,
         )
+        # Public, human-readable model name -- mirrors ``OllamaBackend.model``
+        # so the health endpoint (and anything else introspecting the agent's
+        # LLM) can show *which* model is loaded the same way for both
+        # backends, instead of ``None`` for this one.
+        self.model = Path(model_path).name
 
     def _to_openai_messages(self, messages: list[ChatMessage]) -> list[dict[str, str]]:
         return [{"role": m.role, "content": m.content} for m in messages]

@@ -9,7 +9,8 @@ async function loadStatus() {
   try {
     const res = await fetch("/api/health");
     const data = await res.json();
-    document.getElementById("status-backend").textContent = data.llm_backend;
+    const backendLabel = data.llm_model ? `${data.llm_backend} (${data.llm_model})` : data.llm_backend;
+    document.getElementById("status-backend").textContent = backendLabel;
     document.getElementById("status-native").textContent = data.native_index ? "yes (C++)" : "no (NumPy fallback)";
     document.getElementById("status-tools").textContent = data.tools.join(", ");
   } catch (err) {
