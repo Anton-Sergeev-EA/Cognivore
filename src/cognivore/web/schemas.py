@@ -35,6 +35,7 @@ class ChunkOut(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     llm_backend: str
+    llm_model: str | None = None
     native_index: bool
     tools: list[str]
     knowledge_base_chunks: int
