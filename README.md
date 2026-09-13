@@ -138,6 +138,14 @@ docker run -d -p 8420:8420 -v cognivore-data:/data \
 (Windows/macOS); the explicit `--add-host` above is what makes the same
 command also work on plain Linux, where it otherwise doesn't resolve.
 
+The image ships the audio/video tools (`faster-whisper`, OpenCV) but *not*
+`llama-cpp-python` -- it talks to Ollama over plain HTTP for the LLM
+instead of loading a GGUF file in-process, deliberately, since
+llama-cpp-python has no prebuilt wheel for every platform and needs a
+compiler the runtime stage doesn't carry. Want in-process GGUF inference
+inside the container anyway? Add `build-essential` to the final stage and
+switch its `pip install` back to the `[all]` extra.
+
 **Prebuilt image (no build step at all):** tagged releases are published
 multi-arch (amd64 + arm64 -- Apple Silicon and Raspberry Pi included) to
 GHCR by [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml):
