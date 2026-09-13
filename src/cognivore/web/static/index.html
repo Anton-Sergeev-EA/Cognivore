@@ -4,6 +4,26 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Cognivore</title>
+  <script>
+    // Applied before the stylesheet paints anything, so the page never
+    // flashes the wrong theme for a frame while theme.js loads. Kept as a
+    // tiny inline duplicate of theme.js's detectInitialTheme() rather than
+    // an async import specifically so it can run synchronously this early.
+    (function () {
+      try {
+        var saved = localStorage.getItem("cognivore-theme");
+        var theme =
+          saved && ["dark", "light", "aurora"].includes(saved)
+            ? saved
+            : matchMedia("(prefers-color-scheme: light)").matches
+              ? "light"
+              : "dark";
+        document.documentElement.setAttribute("data-theme", theme);
+      } catch (e) {
+        /* localStorage/matchMedia unavailable -- default stylesheet wins */
+      }
+    })();
+  </script>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
@@ -14,12 +34,18 @@
           <span class="brand-mark">◈</span>
           <span class="brand-name">Cognivore</span>
         </div>
-        <select id="lang-select" class="lang-select" aria-label="Language"></select>
+        <div class="controls-row">
+          <div id="theme-switch" class="theme-switch" role="group" aria-label="Theme"></div>
+          <select id="lang-select" class="lang-select" aria-label="Language"></select>
+        </div>
       </div>
       <p class="tagline" data-i18n="tagline">Local-first agent · RAG · audio · video</p>
 
       <section class="panel">
-        <h2 data-i18n="statusTitle">Status</h2>
+        <h2>
+          <span data-i18n="statusTitle">Status</span>
+          <span id="conn-dot" class="conn-dot" data-i18n-title="connOffline" title="…"></span>
+        </h2>
         <dl id="status-list" class="status-list">
           <dt data-i18n="statusBackendLabel">backend</dt><dd id="status-backend">…</dd>
           <dt data-i18n="statusNativeLabel">native index</dt><dd id="status-native">…</dd>
@@ -29,7 +55,7 @@
 
       <section class="panel">
         <h2 data-i18n="kbTitle">Knowledge base</h2>
-        <label class="dropzone" for="file-input">
+        <label id="file-input-label" class="dropzone" for="file-input">
           <input id="file-input" type="file" accept=".txt,.md,.markdown" hidden />
           <span data-i18n="kbDropzone">Drop a .txt/.md file or click to ingest</span>
         </label>
@@ -38,11 +64,11 @@
 
       <section class="panel">
         <h2 data-i18n="mediaTitle">Media tools</h2>
-        <label class="dropzone small" for="audio-input">
+        <label id="audio-input-label" class="dropzone small" for="audio-input">
           <input id="audio-input" type="file" accept="audio/*" hidden />
           <span data-i18n="mediaAudio">Transcribe audio</span>
         </label>
-        <label class="dropzone small" for="video-input">
+        <label id="video-input-label" class="dropzone small" for="video-input">
           <input id="video-input" type="file" accept="video/*" hidden />
           <span data-i18n="mediaVideo">Analyze video</span>
         </label>
@@ -66,6 +92,7 @@
     </main>
   </div>
   <script src="/i18n.js"></script>
+  <script src="/theme.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

@@ -42,6 +42,11 @@ const TRANSLATIONS = {
     chatSend: "Send",
     chatConnectionError: "(connection error -- is the server running?)",
     contactTitle: "Contact",
+    themeDark: "Dark theme",
+    themeLight: "Light theme",
+    themeAurora: "Aurora theme",
+    connOnline: "Connected",
+    connOffline: "Disconnected",
   },
   ru: {
     tagline: "Локальный агент · RAG · аудио · видео",
@@ -69,6 +74,11 @@ const TRANSLATIONS = {
     chatSend: "Отправить",
     chatConnectionError: "(ошибка соединения — сервер запущен?)",
     contactTitle: "Контакты",
+    themeDark: "Тёмная тема",
+    themeLight: "Светлая тема",
+    themeAurora: "Тема «Аврора»",
+    connOnline: "Подключено",
+    connOffline: "Нет соединения",
   },
   de: {
     tagline: "Lokaler Agent · RAG · Audio · Video",
@@ -96,6 +106,11 @@ const TRANSLATIONS = {
     chatSend: "Senden",
     chatConnectionError: "(Verbindungsfehler — läuft der Server?)",
     contactTitle: "Kontakt",
+    themeDark: "Dunkles Design",
+    themeLight: "Helles Design",
+    themeAurora: "Aurora-Design",
+    connOnline: "Verbunden",
+    connOffline: "Nicht verbunden",
   },
   fr: {
     tagline: "Agent local · RAG · audio · vidéo",
@@ -123,6 +138,11 @@ const TRANSLATIONS = {
     chatSend: "Envoyer",
     chatConnectionError: "(erreur de connexion — le serveur est-il lancé ?)",
     contactTitle: "Contact",
+    themeDark: "Thème sombre",
+    themeLight: "Thème clair",
+    themeAurora: "Thème Aurora",
+    connOnline: "Connecté",
+    connOffline: "Déconnecté",
   },
   it: {
     tagline: "Agente locale · RAG · audio · video",
@@ -150,6 +170,11 @@ const TRANSLATIONS = {
     chatSend: "Invia",
     chatConnectionError: "(errore di connessione — il server è attivo?)",
     contactTitle: "Contatti",
+    themeDark: "Tema scuro",
+    themeLight: "Tema chiaro",
+    themeAurora: "Tema Aurora",
+    connOnline: "Connesso",
+    connOffline: "Disconnesso",
   },
   es: {
     tagline: "Agente local · RAG · audio · video",
@@ -177,6 +202,11 @@ const TRANSLATIONS = {
     chatSend: "Enviar",
     chatConnectionError: "(error de conexión: ¿el servidor está en marcha?)",
     contactTitle: "Contacto",
+    themeDark: "Tema oscuro",
+    themeLight: "Tema claro",
+    themeAurora: "Tema Aurora",
+    connOnline: "Conectado",
+    connOffline: "Desconectado",
   },
 };
 
@@ -211,6 +241,9 @@ function applyStaticTranslations() {
   });
   document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
     el.placeholder = t(el.dataset.i18nPlaceholder);
+  });
+  document.querySelectorAll("[data-i18n-title]").forEach((el) => {
+    el.title = t(el.dataset.i18nTitle);
   });
 }
 

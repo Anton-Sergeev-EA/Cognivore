@@ -29,3 +29,8 @@ project uses [Semantic Versioning](https://semver.org/).
 - Web UI localization: a language switcher (English, Russian, German,
   French, Italian, Spanish) covering all interface copy, with the choice
   remembered per browser.
+- Web UI theming (dark/light/aurora) and small live interactions: a
+  working drag-and-drop for the knowledge-base/audio/video dropzones, an
+  animated "thinking" indicator while the agent is working, a pulsing
+  connection status dot, and expandable trace steps to see the full
+  (untruncated) tool observation.
