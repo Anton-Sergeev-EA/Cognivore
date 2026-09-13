@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import tempfile
+import threading
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -108,21 +109,47 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail="message must not be empty")
 
         async def event_generator():
-            result = await asyncio.to_thread(agent.run, message)
-            for entry in result.trace:
-                yield {
-                    "event": "trace",
-                    "data": TraceStepOut(
-                        thought=entry.thought,
-                        action=entry.action,
-                        action_input=entry.action_input,
-                        observation=entry.observation,
-                    ).model_dump_json(),
-                }
-            chunk_size = 40
-            for i in range(0, len(result.answer), chunk_size):
-                yield {"event": "answer_chunk", "data": result.answer[i : i + chunk_size]}
-                await asyncio.sleep(0)  # yield control so the client sees incremental frames
+            # agent.run_stream() is a plain synchronous generator (the LLM
+            # backends it drives are blocking HTTP/subprocess calls), so it
+            # runs on a worker thread; each event it yields is handed back
+            # to this coroutine through a queue as soon as it's produced,
+            # which is what lets the final answer reach the browser
+            # token-by-token as the model generates it instead of only
+            # after the whole turn finishes.
+            loop = asyncio.get_running_loop()
+            queue: asyncio.Queue = asyncio.Queue()
+            _SENTINEL = object()
+
+            def worker() -> None:
+                try:
+                    for kind, payload in agent.run_stream(message):
+                        loop.call_soon_threadsafe(queue.put_nowait, (kind, payload))
+                except Exception as exc:  # pragma: no cover - surfaced to the client below
+                    loop.call_soon_threadsafe(queue.put_nowait, ("error", str(exc)))
+                finally:
+                    loop.call_soon_threadsafe(queue.put_nowait, _SENTINEL)
+
+            threading.Thread(target=worker, daemon=True).start()
+
+            while True:
+                item = await queue.get()
+                if item is _SENTINEL:
+                    break
+                kind, payload = item
+                if kind == "trace":
+                    yield {
+                        "event": "trace",
+                        "data": TraceStepOut(
+                            thought=payload.thought,
+                            action=payload.action,
+                            action_input=payload.action_input,
+                            observation=payload.observation,
+                        ).model_dump_json(),
+                    }
+                elif kind == "answer_delta":
+                    yield {"event": "answer_chunk", "data": payload}
+                elif kind == "error":
+                    yield {"event": "answer_chunk", "data": f"(error: {payload})"}
             yield {"event": "done", "data": ""}
 
         return EventSourceResponse(event_generator())

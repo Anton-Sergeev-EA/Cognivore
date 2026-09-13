@@ -43,7 +43,7 @@ def list_ollama_models(host: str, timeout: float = 2.0) -> list[str]:
 
 
 class OllamaBackend:
-    def __init__(self, host: str, model: str | None = None, request_timeout: float = 120.0) -> None:
+    def __init__(self, host: str, model: str | None = None, request_timeout: float = 600.0) -> None:
         self.host = host.rstrip("/")
         self.request_timeout = request_timeout
         self.model = model or self._pick_default_model()

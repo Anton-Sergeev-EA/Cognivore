@@ -43,6 +43,12 @@ class Settings(BaseSettings):
         description="Model name to request from Ollama (e.g. 'qwen2.5:3b'). If unset, 'auto' "
         "asks Ollama for whatever models are already pulled and uses the first one.",
     )
+    ollama_request_timeout: float = Field(
+        default=600.0,
+        description="Seconds to wait for an Ollama response. A several-billion-parameter model "
+        "on CPU can genuinely take minutes for a full ReAct turn (system prompt + tool "
+        "definitions + generation) -- this needs to be generous, not just cover network latency.",
+    )
 
     # -- Embeddings ------------------------------------------------------
     embedding_model: str = Field(default="BAAI/bge-small-en-v1.5")
