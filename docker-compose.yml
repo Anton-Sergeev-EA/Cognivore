@@ -17,8 +17,16 @@ services:
   ollama:
     image: ollama/ollama:latest
     container_name: cognivore-ollama
-    ports:
-      - "11434:11434"
+    # No `ports:` mapping to the host on purpose: the `cognivore` service
+    # reaches this over the compose network by service name
+    # (http://ollama:11434), and `docker compose exec ollama ollama pull
+    # ...` runs inside the container's own namespace -- neither needs the
+    # port published to the host at all. Publishing it as 11434:11434
+    # would also just fail outright for anyone who -- not a hypothetical,
+    # this happened -- already has a native Ollama install running on
+    # the host using that same port. Want to reach this container's
+    # Ollama from outside Docker anyway (e.g. to point another tool at
+    # it)? Uncomment a mapping on a free host port, e.g. "11435:11434".
     volumes:
       - ollama-data:/root/.ollama
     restart: unless-stopped
