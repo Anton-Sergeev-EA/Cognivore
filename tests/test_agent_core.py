@@ -1,0 +1,79 @@
+from __future__ import annotations
+
+from cognivore.agent.core import Agent
+from cognivore.agent.parsing import parse_step
+from cognivore.llm.base import GenerationConfig
+from cognivore.llm.fake_backend import FakeLLMBackend
+from cognivore.rag.embeddings import HashingEmbedder
+from cognivore.rag.store import DocumentStore
+from cognivore.tools.base import ToolRegistry
+from cognivore.tools.calculator import CalculatorTool
+from cognivore.tools.rag_search import RagSearchTool
+
+
+def test_parse_step_final_answer() -> None:
+    step = parse_step("Thought: easy one\nFinal Answer: 42")
+    assert step.is_final
+    assert step.final_answer == "42"
+
+
+def test_parse_step_action() -> None:
+    step = parse_step('Thought: need math\nAction: calculator\nAction Input: {"expression": "1+1"}')
+    assert not step.is_final
+    assert step.action == "calculator"
+    assert step.action_input == {"expression": "1+1"}
+
+
+def test_parse_step_falls_back_to_final_answer_on_malformed_output() -> None:
+    step = parse_step("I don't know the format, just answering directly.")
+    assert step.is_final
+    assert "answering directly" in (step.final_answer or "")
+
+
+def _build_agent(max_steps: int = 6) -> Agent:
+    tools = ToolRegistry([CalculatorTool()])
+    return Agent(llm=FakeLLMBackend(), tools=tools, max_steps=max_steps)
+
+
+def test_agent_run_uses_calculator_tool_and_returns_result() -> None:
+    agent = _build_agent()
+    result = agent.run("What is 6 * 7?")
+    assert result.answer.strip() == "42"
+    assert any(t.action == "calculator" for t in result.trace)
+
+
+def test_agent_run_no_tool_needed_returns_final_answer_directly() -> None:
+    agent = _build_agent()
+    result = agent.run("Just say hello.")
+    assert not result.hit_step_limit
+    assert result.trace  # at least the final thought entry
+    assert result.trace[-1].action is None
+
+
+def test_agent_remembers_conversation_turns() -> None:
+    agent = _build_agent()
+    agent.run("2 + 2")
+    assert len(agent.conversation.as_list()) == 2  # one user turn + one assistant turn
+
+
+def test_agent_dispatch_unknown_tool_reports_error_without_crashing() -> None:
+    tools = ToolRegistry([CalculatorTool()])
+    agent = Agent(llm=FakeLLMBackend(), tools=tools)
+    from cognivore.agent.parsing import AgentStep
+
+    fake_step = AgentStep(thought="x", action="not_a_real_tool", action_input={}, final_answer=None)
+    observation = agent._dispatch(fake_step)
+    assert "unknown tool" in observation.lower()
+
+
+def test_agent_with_rag_search_tool_answers_from_ingested_document() -> None:
+    store = DocumentStore(embedder=HashingEmbedder(dim=64))
+    store.add_text(
+        "The Eiffel Tower is located in Paris, France, and was completed in 1889.",
+        source="facts.md",
+    )
+    tools = ToolRegistry([RagSearchTool(store)])
+    agent = Agent(llm=FakeLLMBackend(), tools=tools, generation_config=GenerationConfig())
+    result = agent.run("search the knowledge base for where the Eiffel Tower is")
+    assert "Paris" in result.answer
+    assert any(t.action == "search_knowledge_base" for t in result.trace)
