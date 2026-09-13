@@ -46,6 +46,12 @@ class FakeLLMBackend:
 
         if last_user.startswith("Observation:"):
             observation = last_user[len("Observation:") :].strip()
+            # Agent._observation_message appends a blank line plus a
+            # usage nudge after the actual observation text (a real model
+            # reads both as one message; this fake backend still needs to
+            # echo back only the observation itself to stay a faithful
+            # stand-in for "the model used what it was given").
+            observation = observation.split("\n\n", 1)[0]
             return f"Thought: I now have the observation I need.\nFinal Answer: {observation}"
 
         expr = _extract_math_expression(last_user)
