@@ -34,3 +34,10 @@ project uses [Semantic Versioning](https://semver.org/).
   animated "thinking" indicator while the agent is working, a pulsing
   connection status dot, and expandable trace steps to see the full
   (untruncated) tool observation.
+- `docker-compose.yml`: a one-command stack (Ollama + Cognivore, both
+  containerized) that runs the same way on Windows, macOS, and Linux with
+  nothing installed on the host but Docker. The `Dockerfile` itself now
+  runs as a non-root user and ships a `HEALTHCHECK`. A new CI job builds
+  the image and smoke-tests it (health endpoint, `HEALTHCHECK` status,
+  non-root) on every push; tagged releases publish a multi-arch
+  (amd64/arm64) image to GHCR via `docker-publish.yml`.

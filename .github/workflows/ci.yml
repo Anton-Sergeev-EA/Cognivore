@@ -75,3 +75,42 @@ jobs:
       - run: python setup.py build_ext --inplace
       - name: Smoke-test the extension
         run: python -c "from cognivore import _native; idx = _native.FlatIndex(4); idx.add(0, [1.0,0,0,0]); print(idx.search([1.0,0,0,0], 1))"
+
+  docker:
+    name: Docker build + smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: cognivore:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Run container and hit /api/health
+        run: |
+          docker run -d --name cognivore-smoke -p 8420:8420 cognivore:ci
+          for i in $(seq 1 20); do
+            if curl -sf http://127.0.0.1:8420/api/health; then echo; break; fi
+            [ "$i" -eq 20 ] && { echo "server never came up"; docker logs cognivore-smoke; exit 1; }
+            sleep 1
+          done
+      - name: Confirm the HEALTHCHECK itself reports healthy
+        run: |
+          for i in $(seq 1 20); do
+            status="$(docker inspect -f '{{.State.Health.Status}}' cognivore-smoke)"
+            [ "$status" = "healthy" ] && { echo "healthy"; exit 0; }
+            sleep 2
+          done
+          echo "container never reported healthy (last status: $status)"; docker logs cognivore-smoke; exit 1
+      - name: Confirm it's running as a non-root user
+        run: |
+          user="$(docker exec cognivore-smoke id -un)"
+          echo "running as: $user"
+          [ "$user" != "root" ]
+      - if: always()
+        run: docker rm -f cognivore-smoke || true

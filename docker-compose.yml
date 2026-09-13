@@ -1,0 +1,54 @@
+# One-command local stack: Ollama (a real local LLM) + Cognivore's web UI,
+# both containerized -- nothing to install on the host beyond Docker
+# itself, on Windows, macOS, or Linux alike.
+#
+#   docker compose up -d --build
+#   docker compose exec ollama ollama pull qwen2.5:3b   # one-time, ~2GB
+#   open http://localhost:8420
+#
+# Already have Ollama running on the host instead? Delete the `ollama`
+# service below and point `cognivore.environment.COGNIVORE_OLLAMA_HOST` at
+# it -- on macOS/Windows that's `http://host.docker.internal:11434`; on
+# Linux add `extra_hosts: ["host.docker.internal:host-gateway"]` to the
+# `cognivore` service first (Docker Desktop provides that DNS name for
+# free, plain Linux engines don't).
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: cognivore-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  cognivore:
+    build: .
+    image: cognivore:latest
+    container_name: cognivore
+    depends_on:
+      ollama:
+        condition: service_healthy
+    ports:
+      - "8420:8420"
+    volumes:
+      - cognivore-data:/data
+    environment:
+      # Service names are resolved via Docker's internal DNS on the
+      # compose network, so this works identically on every host OS --
+      # no host.docker.internal / extra_hosts juggling needed here.
+      COGNIVORE_OLLAMA_HOST: http://ollama:11434
+      COGNIVORE_OLLAMA_MODEL: ${COGNIVORE_OLLAMA_MODEL:-qwen2.5:3b}
+      COGNIVORE_LLM_MAX_TOKENS: ${COGNIVORE_LLM_MAX_TOKENS:-256}
+    restart: unless-stopped
+
+volumes:
+  ollama-data:
+  cognivore-data:
