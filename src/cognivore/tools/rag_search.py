@@ -13,13 +13,19 @@ from cognivore.tools.base import Tool
 class RagSearchTool(Tool):
     name = "search_knowledge_base"
     description = (
-        "Searches the ingested documents (hybrid vector + keyword search) and returns the "
-        "most relevant passages with their source. Use this before answering questions about "
-        "content the user has uploaded. Write the query using the same language and, where "
-        "possible, the same key words as the user's own question -- do not translate it. "
-        "The default embedder matches text lexically, so a query translated into a different "
-        "language than the documents will fail to find them even when they answer the "
-        "question."
+        "Searches the knowledge base (hybrid vector + keyword search) and returns the most "
+        "relevant passages with their source. ALWAYS try this FIRST for any question that "
+        "could plausibly be answered by specific, factual content someone has provided -- "
+        "policies, prices, specs, procedures, names, dates, anything a document might state "
+        "precisely. Prefer searching over answering from general knowledge, asking the user "
+        "for more details, or saying more information is needed: the knowledge base may "
+        "already contain the exact answer even if the question doesn't mention uploading or "
+        "a specific document by name. Only skip it for questions that are clearly unrelated "
+        "to any document (small talk, pure arithmetic, etc.). Write the query using the same "
+        "language and, where possible, the same key words as the user's own question -- do "
+        "not translate it. The default embedder matches text lexically, so a query translated "
+        "into a different language than the documents will fail to find them even when they "
+        "answer the question."
     )
     parameters: ClassVar[dict[str, Any]] = {
         "type": "object",
