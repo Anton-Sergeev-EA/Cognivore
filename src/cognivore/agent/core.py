@@ -85,7 +85,7 @@ class Agent:
             observation = self._dispatch(step, user_input=user_input)
             trace.append(TraceEntry(step.thought, step.action, step.action_input, observation))
             messages.append(ChatMessage(role="assistant", content=completion))
-            messages.append(ChatMessage(role="user", content=f"Observation: {observation}"))
+            messages.append(self._observation_message(observation))
 
         # Step budget exhausted: ask once more for a best-effort final answer.
         messages.append(
@@ -144,7 +144,7 @@ class Agent:
             trace.append(entry)
             yield ("trace", entry)
             messages.append(ChatMessage(role="assistant", content=completion))
-            messages.append(ChatMessage(role="user", content=f"Observation: {observation}"))
+            messages.append(self._observation_message(observation))
 
         messages.append(
             ChatMessage(
@@ -179,6 +179,24 @@ class Agent:
                 if already_streamed:
                     yield ("answer_delta", already_streamed)
         return buffer
+
+    def _observation_message(self, observation: str) -> ChatMessage:
+        # Live-tested finding: a small model can retrieve the exact right
+        # passage via search_knowledge_base and then still answer as if
+        # it found nothing ("that's not specified, contact support"),
+        # apparently not registering the Observation as something to
+        # actually use. Naming that expectation explicitly, right where
+        # the model reads the passage, is a direct attempt to fix that --
+        # not yet re-verified live at the time of writing this comment.
+        return ChatMessage(
+            role="user",
+            content=(
+                f"Observation: {observation}\n\n"
+                "If the passage above answers the question, use it directly in your Final "
+                "Answer. Don't say the information isn't available or ask the user for more "
+                "details when it's right there in the Observation."
+            ),
+        )
 
     def _dispatch(self, step: AgentStep, user_input: str = "") -> str:
         if step.action is None:
