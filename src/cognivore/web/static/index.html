@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cognivore</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark">◈</span>
+        <span class="brand-name">Cognivore</span>
+      </div>
+      <p class="tagline">Local-first agent · RAG · audio · video</p>
+
+      <section class="panel">
+        <h2>Status</h2>
+        <dl id="status-list" class="status-list">
+          <dt>backend</dt><dd id="status-backend">…</dd>
+          <dt>native index</dt><dd id="status-native">…</dd>
+          <dt>tools</dt><dd id="status-tools">…</dd>
+        </dl>
+      </section>
+
+      <section class="panel">
+        <h2>Knowledge base</h2>
+        <label class="dropzone" for="file-input">
+          <input id="file-input" type="file" accept=".txt,.md,.markdown" hidden />
+          Drop a .txt/.md file or click to ingest
+        </label>
+        <div id="kb-status" class="muted"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Media tools</h2>
+        <label class="dropzone small" for="audio-input">
+          <input id="audio-input" type="file" accept="audio/*" hidden />
+          Transcribe audio
+        </label>
+        <label class="dropzone small" for="video-input">
+          <input id="video-input" type="file" accept="video/*" hidden />
+          Analyze video
+        </label>
+      </section>
+    </aside>
+
+    <main class="chat">
+      <div id="messages" class="messages"></div>
+      <form id="chat-form" class="composer">
+        <textarea id="chat-input" placeholder="Ask Cognivore anything…" rows="1"></textarea>
+        <button type="submit">Send</button>
+      </form>
+    </main>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>
