@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint & format check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install ruff
+      - run: ruff check .
+      - run: ruff format --check .
+
+  typecheck:
+    name: Type check (mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+      - run: mypy -p cognivore
+
+  test:
+    name: Test (py${{ matrix.python-version }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      # On Windows/macOS runners without a fully-configured C++ toolchain,
+      # the native extension build may legitimately fail -- that's the
+      # exact fallback path cognivore.index is designed to handle, so we
+      # don't treat a failed extension build as a CI failure; the
+      # native-only tests self-skip via `is_native` when that happens.
+      - name: Install (build the native extension if possible)
+        run: pip install -e ".[dev]"
+        continue-on-error: true
+      - name: Install (pure-Python fallback, if the native build failed)
+        run: pip install -e ".[dev]" --no-build-isolation || pip install -e ".[dev]"
+        if: failure()
+      - run: pytest --cov --cov-report=term-missing
+
+  build-native-matrix:
+    name: Native extension builds (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pybind11 setuptools wheel
+      - run: python setup.py build_ext --inplace
+      - name: Smoke-test the extension
+        run: python -c "from cognivore import _native; idx = _native.FlatIndex(4); idx.add(0, [1.0,0,0,0]); print(idx.search([1.0,0,0,0], 1))"
