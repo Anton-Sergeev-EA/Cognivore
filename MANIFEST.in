@@ -1,0 +1,7 @@
+# Files needed to build the native extension from an sdist, since they
+# live outside src/cognivore/ and so aren't picked up by
+# `[tool.setuptools.packages.find]` / package-data alone.
+recursive-include native *.cpp *.hpp
+include setup.py
+include LICENSE
+include README.md
