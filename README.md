@@ -61,7 +61,8 @@ dependencies are missing) are implemented rather than imported.
   exact same tool-calling code path with zero download -- what the test
   suite and CI run against.
 - **Web UI**: FastAPI + SSE streaming + a vanilla JS/HTML/CSS chat
-  interface (no build step, no framework) with file/audio/video upload.
+  interface (no build step, no framework) with file/audio/video upload,
+  localized into English, Russian, German, French, Italian, and Spanish.
 - Full test suite, ruff lint+format, mypy (strict-ish, including a stub for
   the native extension), and a multi-OS/multi-Python CI matrix.
 

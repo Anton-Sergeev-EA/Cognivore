@@ -1,22 +1,41 @@
 // Cognivore chat UI -- vanilla JS, no build step, no framework.
 // Talks to the FastAPI backend via /api/chat/stream (SSE).
+// Text strings come from i18n.js (t(), setLang()) rather than being
+// hardcoded here, so the UI works the same in any supported language.
 
 const messagesEl = document.getElementById("messages");
 const formEl = document.getElementById("chat-form");
 const inputEl = document.getElementById("chat-input");
 
+let lastHealth = null;
+
+function renderStatus() {
+  if (!lastHealth) return;
+  const backendLabel = lastHealth.llm_model
+    ? `${lastHealth.llm_backend} (${lastHealth.llm_model})`
+    : lastHealth.llm_backend;
+  document.getElementById("status-backend").textContent = backendLabel;
+  document.getElementById("status-native").textContent = lastHealth.native_index
+    ? t("statusNativeYes")
+    : t("statusNativeNo");
+  document.getElementById("status-tools").textContent = lastHealth.tools.join(", ");
+}
+
 async function loadStatus() {
   try {
     const res = await fetch("/api/health");
-    const data = await res.json();
-    const backendLabel = data.llm_model ? `${data.llm_backend} (${data.llm_model})` : data.llm_backend;
-    document.getElementById("status-backend").textContent = backendLabel;
-    document.getElementById("status-native").textContent = data.native_index ? "yes (C++)" : "no (NumPy fallback)";
-    document.getElementById("status-tools").textContent = data.tools.join(", ");
+    lastHealth = await res.json();
+    renderStatus();
   } catch (err) {
-    document.getElementById("status-backend").textContent = "unreachable";
+    document.getElementById("status-backend").textContent = t("statusUnreachable");
   }
 }
+
+// Re-render the parts of the UI that come from live data (not just the
+// static data-i18n text) whenever the language changes.
+window.onLanguageChange = () => {
+  renderStatus();
+};
 
 function addMessage(role, text) {
   const el = document.createElement("div");
@@ -69,7 +88,7 @@ async function sendMessage(text) {
   });
   source.onerror = () => {
     if (!answerEl.textContent) {
-      answerEl.textContent = "(connection error -- is the server running?)";
+      answerEl.textContent = t("chatConnectionError");
       answerEl.classList.add("error");
     }
     source.close();
@@ -95,15 +114,15 @@ document.getElementById("file-input").addEventListener("change", async (event) =
   const file = event.target.files[0];
   if (!file) return;
   const statusEl = document.getElementById("kb-status");
-  statusEl.textContent = `Ingesting ${file.name}…`;
+  statusEl.textContent = t("kbIngesting", { file: file.name });
   const form = new FormData();
   form.append("file", file);
   try {
     const res = await fetch("/api/ingest/file", { method: "POST", body: form });
     const data = await res.json();
-    statusEl.textContent = `+${data.chunks_added} chunks (total ${data.total_chunks})`;
+    statusEl.textContent = t("kbIngested", { added: data.chunks_added, total: data.total_chunks });
   } catch (err) {
-    statusEl.textContent = "ingest failed";
+    statusEl.textContent = t("kbIngestFailed");
   }
 });
 
@@ -111,16 +130,17 @@ async function uploadMedia(inputId, endpoint, resultLabel) {
   document.getElementById(inputId).addEventListener("change", async (event) => {
     const file = event.target.files[0];
     if (!file) return;
-    addMessage("user", `[uploaded ${resultLabel === "transcript" ? "audio" : "video"}: ${file.name}]`);
-    const placeholder = addMessage("assistant", "Processing…");
+    const uploadedKey = resultLabel === "transcript" ? "mediaUploadedAudio" : "mediaUploadedVideo";
+    addMessage("user", t(uploadedKey, { file: file.name }));
+    const placeholder = addMessage("assistant", t("mediaProcessing"));
     const form = new FormData();
     form.append("file", file);
     try {
       const res = await fetch(endpoint, { method: "POST", body: form });
       const data = await res.json();
-      placeholder.textContent = data[resultLabel] || data.detail || "(no result)";
+      placeholder.textContent = data[resultLabel] || data.detail || t("mediaNoResult");
     } catch (err) {
-      placeholder.textContent = "Processing failed.";
+      placeholder.textContent = t("mediaProcessingFailed");
       placeholder.classList.add("error");
     }
   });
@@ -129,4 +149,5 @@ async function uploadMedia(inputId, endpoint, resultLabel) {
 uploadMedia("audio-input", "/api/media/audio", "transcript");
 uploadMedia("video-input", "/api/media/video", "analysis");
 
+initLanguageSwitcher(document.getElementById("lang-select"));
 loadStatus();
