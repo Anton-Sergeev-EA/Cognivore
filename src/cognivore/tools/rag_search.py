@@ -15,7 +15,11 @@ class RagSearchTool(Tool):
     description = (
         "Searches the ingested documents (hybrid vector + keyword search) and returns the "
         "most relevant passages with their source. Use this before answering questions about "
-        "content the user has uploaded."
+        "content the user has uploaded. Write the query using the same language and, where "
+        "possible, the same key words as the user's own question -- do not translate it. "
+        "The default embedder matches text lexically, so a query translated into a different "
+        "language than the documents will fail to find them even when they answer the "
+        "question."
     )
     parameters: ClassVar[dict[str, Any]] = {
         "type": "object",
