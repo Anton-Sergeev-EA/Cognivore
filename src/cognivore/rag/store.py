@@ -79,6 +79,29 @@ class DocumentStore:
         corpus = [self._chunks[i].lower().split() for i in self._bm25_ids]
         self._bm25 = BM25Okapi(corpus) if corpus else None
 
+    def search_multi(
+        self, queries: list[str], top_k: int = 5, ef: int = 150
+    ) -> list[RetrievedChunk]:
+        """Runs :meth:`search` once per (non-empty, de-duplicated) query and
+        merges the results, keeping each chunk's best score across queries.
+
+        Exists for a concrete, observed failure mode: a small local model
+        asked to search rewrites (often translates) the query it was given
+        rather than reusing the user's own words, and the offline/lexical
+        parts of hybrid search only match literal token overlap -- so a
+        query in the "wrong" language can miss a document that plainly
+        answers the question. Trying the user's original wording alongside
+        whatever query the model chose is a cheap way to not depend on the
+        model getting that right.
+        """
+        seen: dict[int, RetrievedChunk] = {}
+        for query in dict.fromkeys(q for q in queries if q.strip()):
+            for hit in self.search(query, top_k=top_k, ef=ef):
+                existing = seen.get(hit.id)
+                if existing is None or hit.score > existing.score:
+                    seen[hit.id] = hit
+        return sorted(seen.values(), key=lambda h: h.score, reverse=True)[:top_k]
+
     def search(self, query: str, top_k: int = 5, ef: int = 150) -> list[RetrievedChunk]:
         if not self._chunks:
             return []
