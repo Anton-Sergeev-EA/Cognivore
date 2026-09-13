@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 
 import pytest
@@ -53,10 +54,14 @@ def test_ingest_file_rejects_non_utf8(client: TestClient) -> None:
     assert res.status_code == 400
 
 
+@pytest.mark.skipif(
+    importlib.util.find_spec("faster_whisper") is not None,
+    reason="only meaningful when the `audio` extra is NOT installed",
+)
 def test_media_audio_endpoint_returns_503_when_extra_not_installed(client: TestClient) -> None:
-    # This test environment doesn't install the `audio` extra, so the tool
-    # is never registered and the endpoint should say so explicitly rather
-    # than attempt (and fail) to transcribe.
+    # When the `audio` extra isn't installed, the tool is never registered
+    # and the endpoint should say so explicitly rather than attempt (and
+    # fail) to transcribe.
     res = client.post("/api/media/audio", files={"file": ("a.wav", b"\x00\x00", "audio/wav")})
     assert res.status_code == 503
 
