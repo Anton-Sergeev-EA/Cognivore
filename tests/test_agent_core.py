@@ -77,3 +77,36 @@ def test_agent_with_rag_search_tool_answers_from_ingested_document() -> None:
     result = agent.run("search the knowledge base for where the Eiffel Tower is")
     assert "Paris" in result.answer
     assert any(t.action == "search_knowledge_base" for t in result.trace)
+
+
+def test_run_stream_yields_answer_deltas_that_reassemble_to_the_final_answer() -> None:
+    agent = _build_agent()
+    events = list(agent.run_stream("Just say hello."))
+
+    deltas = "".join(payload for kind, payload in events if kind == "answer_delta")
+    finals = [payload for kind, payload in events if kind == "final"]
+    assert len(finals) == 1
+    assert deltas.strip() == finals[0].answer.strip()
+
+
+def test_run_stream_emits_trace_before_streaming_the_final_answer() -> None:
+    agent = _build_agent()
+    events = list(agent.run_stream("What is 6 * 7?"))
+
+    kinds = [kind for kind, _ in events]
+    assert "trace" in kinds
+    assert kinds.index("trace") < kinds.index("answer_delta")
+    finals = [payload for kind, payload in events if kind == "final"]
+    assert finals[0].answer.strip() == "42"
+
+
+def test_run_stream_does_not_leak_raw_react_syntax_into_answer_deltas() -> None:
+    # A tool-call step's raw completion (e.g. 'Action: calculator\n...')
+    # must never appear in an answer_delta -- only text from a genuine
+    # "Final Answer:" section should stream live.
+    agent = _build_agent()
+    events = list(agent.run_stream("What is 6 * 7?"))
+
+    deltas = "".join(payload for kind, payload in events if kind == "answer_delta")
+    assert "Action:" not in deltas
+    assert "Thought:" not in deltas

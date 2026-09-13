@@ -32,7 +32,11 @@ def _build_ollama_backend(settings: Settings) -> LLMBackend | None:
     if not is_ollama_running(settings.ollama_host):
         return None
     try:
-        backend = OllamaBackend(host=settings.ollama_host, model=settings.ollama_model)
+        backend = OllamaBackend(
+            host=settings.ollama_host,
+            model=settings.ollama_model,
+            request_timeout=settings.ollama_request_timeout,
+        )
     except OllamaUnavailableError as exc:
         logger.info("Ollama is running but unusable (%s); trying the next backend.", exc)
         return None
