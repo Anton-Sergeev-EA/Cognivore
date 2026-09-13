@@ -131,6 +131,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
             threading.Thread(target=worker, daemon=True).start()
 
+            # Normally the final answer arrives entirely as "answer_delta"
+            # events, live, as the model generates it. But a real model
+            # doesn't always use the literal "Final Answer:" marker
+            # (sometimes it just answers directly, or after a malformed
+            # tool-call attempt) -- run_stream still recognizes that as the
+            # final answer via AgentResult, but nothing gets streamed live
+            # for it since no marker was ever seen. Without this fallback
+            # that answer would silently never reach the client at all.
+            got_any_delta = False
+
             while True:
                 item = await queue.get()
                 if item is _SENTINEL:
@@ -147,7 +157,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         ).model_dump_json(),
                     }
                 elif kind == "answer_delta":
+                    got_any_delta = True
                     yield {"event": "answer_chunk", "data": payload}
+                elif kind == "final":
+                    if not got_any_delta and payload.answer:
+                        yield {"event": "answer_chunk", "data": payload.answer}
                 elif kind == "error":
                     yield {"event": "answer_chunk", "data": f"(error: {payload})"}
             yield {"event": "done", "data": ""}
