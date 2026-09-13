@@ -12,26 +12,24 @@ from cognivore.tools.base import Tool
 
 class RagSearchTool(Tool):
     name = "search_knowledge_base"
+    # Kept deliberately short: every word here is repeated in the system
+    # prompt on EVERY model call, and on CPU-only inference a longer
+    # prompt means longer prefill on every single turn of the ReAct loop.
+    # The behavioral nudges that earned their keep from live testing
+    # (search proactively; don't translate the query) stay; the more
+    # verbose, more "explain why" version tried first was reverted after
+    # visibly slowing down every response.
     description = (
-        "Searches the knowledge base (hybrid vector + keyword search) and returns the most "
-        "relevant passages with their source. ALWAYS try this FIRST for any question that "
-        "could plausibly be answered by specific, factual content someone has provided -- "
-        "policies, prices, specs, procedures, names, dates, anything a document might state "
-        "precisely. Prefer searching over answering from general knowledge, asking the user "
-        "for more details, or saying more information is needed: the knowledge base may "
-        "already contain the exact answer even if the question doesn't mention uploading or "
-        "a specific document by name. Only skip it for questions that are clearly unrelated "
-        "to any document (small talk, pure arithmetic, etc.). Write the query using the same "
-        "language and, where possible, the same key words as the user's own question -- do "
-        "not translate it. The default embedder matches text lexically, so a query translated "
-        "into a different language than the documents will fail to find them even when they "
-        "answer the question."
+        "Searches the knowledge base and returns the most relevant passages with their "
+        "source. Prefer searching over guessing or asking for more details -- it may already "
+        "have the exact answer even to a plain factual question. Use the user's own language "
+        "and wording; do not translate the query, since matching is literal-text-based."
     )
     parameters: ClassVar[dict[str, Any]] = {
         "type": "object",
         "properties": {
             "query": {"type": "string"},
-            "top_k": {"type": "integer", "default": 5},
+            "top_k": {"type": "integer", "default": 3},
         },
         "required": ["query"],
     }
@@ -39,7 +37,7 @@ class RagSearchTool(Tool):
     def __init__(self, store: DocumentStore) -> None:
         self.store = store
 
-    def run(self, query: str = "", top_k: int = 5, _user_input: str = "", **_: object) -> str:
+    def run(self, query: str = "", top_k: int = 3, _user_input: str = "", **_: object) -> str:
         if len(self.store) == 0:
             return "The knowledge base is empty. No documents have been ingested yet."
         # Also try the user's own, unmodified wording of the question --
@@ -51,6 +49,9 @@ class RagSearchTool(Tool):
             return "No relevant passages found."
         lines = []
         for i, hit in enumerate(hits, start=1):
-            snippet = hit.text[:500]
-            lines.append(f"[{i}] (source: {hit.source}, score: {hit.score:.3f}) {snippet}")
+            # Shorter snippets keep the Observation text (which the model
+            # re-reads on its very next, slowest-so-far call) from adding
+            # unnecessary prefill time on CPU-only inference.
+            snippet = hit.text[:300]
+            lines.append(f"[{i}] ({hit.source}) {snippet}")
         return "\n\n".join(lines)
