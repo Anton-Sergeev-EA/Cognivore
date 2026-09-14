@@ -226,6 +226,22 @@ viene memorizzato nella cache del volume persistente `cognivore-data`
 (`HF_HOME=/data/hf-cache`), quindi si scarica una sola volta e non ad ogni
 `docker compose up --build`.
 
+**Arresto e riavvio** (ad esempio dopo un riavvio del sistema):
+
+```bash
+docker compose down   # arresta entrambi i container; i dati vengono conservati (vedi sotto)
+docker compose up -d  # riavvia -- non serve --build a meno che l'immagine stessa non sia cambiata
+```
+
+Entrambi i servizi sono impostati su `restart: unless-stopped`, quindi se non
+li avete arrestati manualmente prima dello spegnimento, Docker li riavvia
+automaticamente non appena il demone Docker torna attivo (il comportamento
+predefinito sulla maggior parte delle installazioni) -- in quel caso non è
+necessario alcun comando. La base di conoscenza e i modelli Whisper/Ollama
+memorizzati nella cache vivono nei volumi con nome `cognivore-data` e
+`ollama-data`, che `docker compose down` non tocca mai; solo un esplicito
+`docker compose down -v` li rimuove.
+
 **Immagine precompilata (senza alcuno step di build):** le release
 taggate sono pubblicate multi-architettura (amd64 + arm64 -- inclusi
 Apple Silicon e Raspberry Pi) su GHCR da

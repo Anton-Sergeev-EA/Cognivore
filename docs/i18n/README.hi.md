@@ -220,6 +220,21 @@ OCR के लिए Tesseract) के साथ आती है
 इसलिए यह सिर्फ़ एक बार डाउनलोड होता है, हर `docker compose up --build`
 पर नहीं।
 
+**रोकना और फिर से शुरू करना** (जैसे reboot के बाद):
+
+```bash
+docker compose down   # दोनों कंटेनर्स को रोकता है; डेटा बना रहता है (नीचे देखें)
+docker compose up -d  # फिर से शुरू करता है -- --build की ज़रूरत नहीं, जब तक इमेज खुद न बदली हो
+```
+
+दोनों services `restart: unless-stopped` पर सेट हैं, इसलिए अगर आपने shutdown से
+पहले उन्हें मैन्युअली नहीं रोका, तो Docker daemon वापस ऊपर आने पर (ज़्यादातर
+installs पर डिफ़ॉल्ट) उन्हें अपने-आप restart कर देता है -- उस स्थिति में किसी
+कमांड की ज़रूरत ही नहीं। नॉलेज बेस और cached Whisper/Ollama मॉडल्स named
+volumes `cognivore-data` और `ollama-data` में रहते हैं, जिन्हें
+`docker compose down` कभी नहीं छूता; इन्हें सिर्फ़ एक explicit
+`docker compose down -v` ही हटाता है।
+
 **Prebuilt इमेज (बिल्कुल कोई बिल्ड स्टेप नहीं):** tagged रिलीज़
 [`.github/workflows/docker-publish.yml`](../../.github/workflows/docker-publish.yml)
 के ज़रिए multi-arch (amd64 + arm64 -- Apple Silicon और Raspberry Pi

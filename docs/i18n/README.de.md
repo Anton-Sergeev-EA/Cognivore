@@ -225,6 +225,22 @@ Modelle von Ollama wird es im persistenten Volume `cognivore-data`
 zwischengespeichert (`HF_HOME=/data/hf-cache`), sodass es nur einmal
 heruntergeladen wird und nicht bei jedem `docker compose up --build`.
 
+**Stoppen und neu starten** (z. B. nach einem Neustart):
+
+```bash
+docker compose down   # stoppt beide Container; Daten bleiben erhalten (siehe unten)
+docker compose up -d  # startet erneut -- kein --build nötig, außer das Image selbst hat sich geändert
+```
+
+Beide Dienste sind auf `restart: unless-stopped` gesetzt. Wenn Sie sie also vor
+dem Herunterfahren nicht manuell gestoppt haben, startet Docker sie von selbst
+neu, sobald der Docker-Daemon wieder hochkommt (die Standardeinstellung bei den
+meisten Installationen) -- in diesem Fall ist überhaupt kein Befehl nötig. Die
+Wissensdatenbank und die zwischengespeicherten Whisper-/Ollama-Modelle liegen
+in den benannten Volumes `cognivore-data` und `ollama-data`, die
+`docker compose down` niemals berührt; nur ein explizites
+`docker compose down -v` entfernt sie.
+
 **Vorgefertigtes Image (überhaupt kein Build-Schritt):** getaggte Releases
 werden multi-arch (amd64 + arm64 -- Apple Silicon und Raspberry Pi
 eingeschlossen) über

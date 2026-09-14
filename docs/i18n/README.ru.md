@@ -213,6 +213,21 @@ llama-cpp-python нет готового пакета под каждую пла
 volume `cognivore-data` (`HF_HOME=/data/hf-cache`), так что скачивается
 только один раз, а не при каждом `docker compose up --build`.
 
+**Остановка и повторный запуск** (например, после перезагрузки):
+
+```bash
+docker compose down   # останавливает оба контейнера; данные сохраняются (см. ниже)
+docker compose up -d  # запускает снова -- --build не нужен, если сам образ не менялся
+```
+
+Оба сервиса настроены с `restart: unless-stopped`, так что если вы не
+остановили их вручную перед выключением, Docker перезапустит их сам, как
+только демон Docker снова поднимется (по умолчанию так и происходит в
+большинстве установок) — в этом случае никакая команда не нужна вовсе.
+База знаний и закешированные модели Whisper/Ollama живут в именованных
+volume'ах `cognivore-data` и `ollama-data`, которые `docker compose down`
+никогда не трогает; удаляет их только явный `docker compose down -v`.
+
 **Готовый образ (без единого шага сборки):** релизы с тегами публикуются
 мультиархитектурно (amd64 + arm64 — включая Apple Silicon и Raspberry Pi)
 в GHCR через [`.github/workflows/docker-publish.yml`](../../.github/workflows/docker-publish.yml):

@@ -212,6 +212,21 @@ Ollama's models, it's cached in the persisted `cognivore-data` volume
 (`HF_HOME=/data/hf-cache`), so it only downloads once, not on every
 `docker compose up --build`.
 
+**Stopping and restarting** (e.g. after a reboot):
+
+```bash
+docker compose down   # stops both containers; data is kept (see below)
+docker compose up -d  # starts again -- no --build needed unless the image itself changed
+```
+
+Both services are set to `restart: unless-stopped`, so if you didn't stop
+them manually before shutting down, Docker restarts them on its own once
+the Docker daemon comes back up (the default on most installs) -- no
+command needed at all in that case. The knowledge base and the cached
+Whisper/Ollama models live in the named volumes `cognivore-data` and
+`ollama-data`, which `docker compose down` never touches; only an explicit
+`docker compose down -v` removes them.
+
 **Prebuilt image (no build step at all):** tagged releases are published
 multi-arch (amd64 + arm64 -- Apple Silicon and Raspberry Pi included) to
 GHCR by [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml):
