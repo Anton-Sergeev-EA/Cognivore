@@ -154,6 +154,21 @@ Bildschirmtext eine andere Sprache, installieren Sie deren Paket
 `tesseract-ocr-<lang>` und fügen Sie sie zu `COGNIVORE_OCR_LANGUAGES`
 hinzu (z. B. `eng+rus+deu`).
 
+Die OCR von `analyze_video` ist auf die Inhalte ausgelegt, die schon die
+Tool-Beschreibung selbst nennt -- Screencasts, Vorlesungsaufzeichnungen,
+folienbasierte Videos -- bei denen der Text groß und bewusst gesetzt ist.
+Bei einer rohen Terminal-/IDE-Bildschirmaufnahme geht es deutlich rauer
+zu: kleine Monospace-Schrift, starke Videokompression genau an den
+Szenenschnitten, auf die sich dieses Tool stützt, sowie
+Rahmenzeichnungs- und Symbolglyphen, auf die OCR-Modelle nie trainiert
+wurden. Das Hochskalieren oder Schwellenwert-Filtern des Frames vor der
+OCR hilft nicht zuverlässig, sobald die Kompression die feinen Details
+schon vernichtet hat -- das wurde durch Tests bestätigt, nicht nur
+vermutet. Wenn Sie speziell möchten, dass Terminal-/Code-Text im Bild
+gut per OCR erkannt wird, nehmen Sie mit größerer Schriftgröße und/oder
+höherer Auflösung auf; das ist der Hebel, der tatsächlich wirkt -- nicht
+eine nachträgliche Bildbearbeitung.
+
 ### Docker
 
 Das Image wird in mehreren Stufen gebaut (kompiliert die native

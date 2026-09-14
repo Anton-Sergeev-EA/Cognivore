@@ -151,6 +151,20 @@ Docker इमेज में दोनों पहले से ही शा�
 `tesseract-ocr-<lang>` पैकेज इंस्टॉल करें और उसे `COGNIVORE_OCR_LANGUAGES`
 में जोड़ें (जैसे `eng+rus+deu`)।
 
+`analyze_video` का OCR उस तरह के कंटेंट के लिए बनाया गया है जिसका ज़िक्र
+इस tool के अपने description में ही है -- screencasts, lecture recordings,
+slide-based videos -- जहाँ टेक्स्ट बड़ा और सोच-समझकर composed होता है।
+किसी raw terminal/IDE स्क्रीन रिकॉर्डिंग पर यह कहीं ज़्यादा rough साबित
+होता है: छोटा monospace font, ठीक उन scene cuts पर भारी video
+compression जिन्हें यह tool अपना आधार बनाता है, और box-drawing या symbol
+glyphs जिन पर OCR मॉडल कभी trained ही नहीं हुए। OCR से पहले frame को
+upscale या threshold करना भरोसे के साथ मदद नहीं करता, जब compression
+पहले ही fine detail गँवा चुका हो -- यह testing से confirm किया गया है,
+सिर्फ़ अनुमान नहीं। अगर आप specifically चाहते हैं कि on-screen
+terminal/code टेक्स्ट अच्छे से OCR हो, तो बड़े font size और/या ज़्यादा
+resolution पर रिकॉर्ड करें; यही असली lever है जो काम करता है, बाद में
+post-processing नहीं।
+
 ### Docker
 
 यह इमेज एक multi-stage build है (नेटिव C++ एक्सटेंशन को कंपाइल करती है,

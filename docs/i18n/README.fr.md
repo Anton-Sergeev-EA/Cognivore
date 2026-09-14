@@ -157,6 +157,22 @@ Si votre texte à l'écran utilise une autre langue, installez son paquet
 `tesseract-ocr-<lang>` et ajoutez-la à `COGNIVORE_OCR_LANGUAGES` (par
 exemple `eng+rus+deu`).
 
+L'OCR d'`analyze_video` vise le type de contenu que la description de
+l'outil lui-même désigne -- captures d'écran commentées, enregistrements
+de cours, vidéos à base de diapositives -- où le texte est grand et
+composé avec soin. C'est beaucoup plus laborieux sur l'enregistrement
+brut d'un terminal ou d'un IDE : police monospace de petite taille,
+forte compression vidéo précisément aux coupures de plan sur lesquelles
+cet outil s'appuie, et glyphes de dessin de boîtes ou symboles pour
+lesquels les modèles d'OCR n'ont jamais été entraînés. Suréchantillonner
+ou seuiller l'image avant l'OCR n'aide pas de façon fiable une fois que
+la compression a déjà sacrifié les détails fins -- ceci a été vérifié
+par des tests, pas simplement supposé. Si vous voulez spécifiquement que
+le texte de terminal ou de code affiché à l'écran soit bien reconnu par
+l'OCR, enregistrez avec une police plus grande et/ou une résolution plus
+élevée ; c'est le seul levier qui fonctionne réellement, pas un
+post-traitement après coup.
+
 ### Docker
 
 L'image est construite en plusieurs étapes (compile l'extension native en

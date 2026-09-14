@@ -66,6 +66,16 @@ project uses [Semantic Versioning](https://semver.org/).
   both containers back on their own after a reboot if they weren't stopped
   manually first, and that `cognivore-data`/`ollama-data` survive `down`
   (only an explicit `down -v` removes them).
+- README.md (and all 8 translations): documented that `analyze_video`'s
+  OCR targets the content its own tool description names -- screencasts,
+  lecture recordings, slide-based videos -- and is a much rougher ride on
+  a raw terminal/IDE recording (small monospace font, compression
+  artifacts right at scene cuts, glyphs like box-drawing characters the
+  OCR model was never trained on). Tested that upscaling/thresholding the
+  frame doesn't reliably help once compression has already discarded the
+  detail, so the README points at recording with a larger font/higher
+  resolution instead of promising a post-processing fix that doesn't
+  actually work.
 
 ### Fixed
 
