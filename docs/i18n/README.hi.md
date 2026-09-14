@@ -142,6 +142,15 @@ docker compose exec ollama ollama pull qwen2.5:3b   # one-time, ~2GB
 और ठीक से चलता है -- यह सिर्फ तब तक ऑफ़लाइन `FakeLLMBackend` डेमो मोड पर
 फॉलबैक करता है जब तक कोई मॉडल उपलब्ध नहीं हो जाता।
 
+compose स्टैक `COGNIVORE_SEED_DEMO_KB=true` भी सेट करता है, इसलिए एक नई (खाली)
+knowledge base खाली dropzone दिखाने के बजाय दो बंडल किए गए डेमो कंपनी हैंडबुक
+(अंग्रेज़ी + रूसी — प्राइसिंग, SLA, सुरक्षा, रिफंड पॉलिसी, सपोर्ट FAQ) से
+अपने-आप भर जाती है। यह हमेशा केवल *खाली* knowledge base को ही भरता है: जैसे ही
+आप अपने खुद के दस्तावेज़ ingest करते हैं, यह स्थायी रूप से no-op बन जाता है।
+खाली शुरू करने के लिए `docker-compose.yml` में इसे `false` सेट करें (या
+`docker run -e COGNIVORE_SEED_DEMO_KB=false`), या किसी भी समय `cognivore
+seed-demo` चलाकर उन्हीं डेमो दस्तावेज़ों को किसी मौजूदा store में जोड़ें।
+
 **पहले से host पर Ollama चल रहा है, या एक ही कंटेनर चाहिए?**
 
 ```bash
@@ -181,6 +190,7 @@ docker pull ghcr.io/anton-sergeev-ea/cognivore:latest
 ```bash
 cognivore chat                              # interactive REPL
 cognivore ingest ./docs                     # recursively indexes .txt/.md/.markdown/.rst
+cognivore seed-demo                         # बंडल किए गए EN+RU डेमो कंपनी हैंडबुक जोड़ता है
 cognivore serve --host 0.0.0.0 --port 8420  # web UI + REST/SSE API
 cognivore bench                             # index build/search benchmarks (see below)
 ```

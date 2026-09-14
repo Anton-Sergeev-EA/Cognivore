@@ -55,6 +55,13 @@ services:
       COGNIVORE_OLLAMA_HOST: http://ollama:11434
       COGNIVORE_OLLAMA_MODEL: ${COGNIVORE_OLLAMA_MODEL:-qwen2.5:3b}
       COGNIVORE_LLM_MAX_TOKENS: ${COGNIVORE_LLM_MAX_TOKENS:-256}
+      # First run only: seeds the knowledge base (the fresh named volume
+      # above) with a bundled demo company handbook in English and
+      # Russian, so `docker compose up` gives you something to actually
+      # ask about instead of an empty dropzone. Only ever seeds an empty
+      # knowledge base -- once you've ingested your own documents, this
+      # is a no-op forever. Set to "false" to start completely empty.
+      COGNIVORE_SEED_DEMO_KB: ${COGNIVORE_SEED_DEMO_KB:-true}
     restart: unless-stopped
 
 volumes:

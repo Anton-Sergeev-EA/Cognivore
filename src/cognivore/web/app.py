@@ -18,7 +18,11 @@ from sse_starlette.sse import EventSourceResponse
 from starlette.responses import Response
 from starlette.types import Scope
 
-from cognivore.bootstrap import build_agent, build_document_store
+from cognivore.bootstrap import (
+    build_agent,
+    load_or_build_document_store,
+    seed_demo_knowledge_base,
+)
 from cognivore.config import Settings, get_settings
 from cognivore.index import is_native
 from cognivore.rag.store import DocumentStore
@@ -63,17 +67,29 @@ def _load_or_build_store(settings: Settings) -> DocumentStore:
     ``.env`` to point at a real LLM). Falls back to a fresh store if
     nothing was saved yet, or if the saved store doesn't match the current
     embedder configuration.
+
+    A *fresh* store (nothing was ever persisted at this data dir) is where
+    ``COGNIVORE_SEED_DEMO_KB=true`` seeds the bundled demo documents --
+    this only ever runs once per data dir: the seeded store is saved
+    immediately below, so the next restart takes the "restore" path above
+    instead and never re-seeds a knowledge base someone has since
+    ingested their own documents into.
     """
     store_dir = settings.data_dir / _STORE_SUBDIR
-    if (store_dir / "meta.json").exists():
-        try:
-            embedder = build_document_store(settings).embedder
-            store = DocumentStore.load(store_dir, embedder=embedder)
-            logger.info("Restored knowledge base from %s (%d chunks).", store_dir, len(store))
-            return store
-        except Exception:
-            logger.warning("Could not restore saved knowledge base; starting fresh.", exc_info=True)
-    return build_document_store(settings)
+    was_fresh = not (store_dir / "meta.json").exists()
+    store = load_or_build_document_store(settings, store_dir)
+    if was_fresh and settings.seed_demo_kb:
+        added = seed_demo_knowledge_base(store, settings)
+        if added:
+            logger.info(
+                "COGNIVORE_SEED_DEMO_KB=true: seeded a fresh knowledge base with %d demo chunks.",
+                added,
+            )
+            try:
+                store.save(store_dir)
+            except OSError:
+                logger.warning("Could not persist the seeded demo knowledge base.", exc_info=True)
+    return store
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:

@@ -11,7 +11,11 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 
-from cognivore.bootstrap import build_agent, build_document_store
+from cognivore.bootstrap import (
+    build_agent,
+    load_or_build_document_store,
+    seed_demo_knowledge_base,
+)
 from cognivore.config import get_settings
 
 app = typer.Typer(add_completion=False, help="Cognivore: a local-first multimodal agent.")
@@ -61,7 +65,7 @@ def ingest(
 ) -> None:
     """Ingests text files into the local RAG store."""
     settings = get_settings()
-    store = build_document_store(settings)
+    store = load_or_build_document_store(settings, store_dir)
     files = [path] if path.is_file() else sorted(p for p in path.rglob("*") if p.is_file())
     total_chunks = 0
     for file_path in files:
@@ -78,6 +82,24 @@ def ingest(
         console.print(f"[green]+[/green] {file_path} -> {len(ids)} chunks")
     store.save(store_dir)
     console.print(f"Ingested {total_chunks} chunks from {len(files)} file(s) into {store_dir}")
+
+
+@app.command("seed-demo")
+def seed_demo(
+    store_dir: Path = typer.Option(Path("./.cognivore/store"), help="Where to persist the store."),
+) -> None:
+    """Seeds the local knowledge base with the bundled demo company
+    handbooks (English + Russian) so there's something to search and ask
+    about immediately -- handy for a first run or a live demo without
+    ``COGNIVORE_SEED_DEMO_KB`` (that env var does the same thing
+    automatically for `serve`, but only on an empty knowledge base;
+    this command is for adding the demo docs to an *existing* store on
+    demand)."""
+    settings = get_settings()
+    store = load_or_build_document_store(settings, store_dir)
+    added = seed_demo_knowledge_base(store, settings)
+    store.save(store_dir)
+    console.print(f"[green]+[/green] seeded {added} chunks into {store_dir}")
 
 
 @app.command()

@@ -16,6 +16,14 @@ class Settings(BaseSettings):
 
     # -- Storage -----------------------------------------------------
     data_dir: Path = Field(default=Path("./.cognivore"), description="Local data directory")
+    seed_demo_kb: bool = Field(
+        default=False,
+        description="On a fresh (empty) knowledge base, seed it automatically with the "
+        "bundled demo company handbooks (English + Russian) so there's something to ask "
+        "about immediately -- handy for a first run, a live demo, or a fresh container with "
+        "no prior volume. Never overwrites or touches an already-populated knowledge base. "
+        "docker-compose.yml enables this by default; set to false to start empty instead.",
+    )
 
     # -- LLM -----------------------------------------------------------
     llm_provider: str = Field(

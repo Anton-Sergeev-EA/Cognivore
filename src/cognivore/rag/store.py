@@ -52,6 +52,16 @@ class DocumentStore:
     def __len__(self) -> int:
         return len(self._chunks)
 
+    def sources(self) -> set[str]:
+        """Distinct ``source`` labels of everything currently in the store
+        (e.g. file paths from `cognivore ingest`, or a demo-doc label from
+        seeding). Lets a caller check "is this document already in here?"
+        before re-adding it, so repeatable operations (like seeding demo
+        content) can be made idempotent instead of duplicating chunks on
+        every run.
+        """
+        return set(self._sources.values())
+
     def add_text(
         self,
         text: str,

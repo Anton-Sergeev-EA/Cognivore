@@ -146,6 +146,17 @@ Windows/macOS/Linux. Sin ese `ollama pull` inicial, Cognivore de todos
 modos arranca y funciona correctamente -- simplemente recae en el modo de
 demostración offline `FakeLLMBackend` hasta que haya un modelo disponible.
 
+El stack de compose también define `COGNIVORE_SEED_DEMO_KB=true`, por lo que
+una base de conocimiento nueva se llena automáticamente con dos manuales de
+empresa de demostración incluidos (inglés + ruso -- precios, SLA, seguridad,
+política de reembolsos, preguntas frecuentes de soporte) en lugar de abrir con
+una zona de carga vacía. Solo llena una base de conocimiento *vacía*: en
+cuanto hayas ingerido tus propios documentos, esto se convierte en un no-op
+permanente. Ponlo en `false` en `docker-compose.yml` (o `docker run -e
+COGNIVORE_SEED_DEMO_KB=false`) para empezar vacío, o ejecuta `cognivore
+seed-demo` en cualquier momento para añadir los mismos documentos de
+demostración a un almacén ya existente.
+
 **¿Ya tienes Ollama corriendo en el host, o quieres un único contenedor?**
 
 ```bash
@@ -186,6 +197,7 @@ docker pull ghcr.io/anton-sergeev-ea/cognivore:latest
 ```bash
 cognivore chat                              # interactive REPL
 cognivore ingest ./docs                     # recursively indexes .txt/.md/.markdown/.rst
+cognivore seed-demo                         # añade los manuales de empresa demo EN+RU incluidos
 cognivore serve --host 0.0.0.0 --port 8420  # web UI + REST/SSE API
 cognivore bench                             # index build/search benchmarks (see below)
 ```

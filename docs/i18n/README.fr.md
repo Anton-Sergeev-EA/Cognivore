@@ -150,6 +150,17 @@ Cognivore démarre et fonctionne quand même très bien -- il retombe
 simplement dans le mode démo hors ligne `FakeLLMBackend` jusqu'à ce qu'un
 modèle soit disponible.
 
+La pile compose définit aussi `COGNIVORE_SEED_DEMO_KB=true`, si bien qu'une
+base de connaissances neuve est automatiquement alimentée avec deux manuels
+d'entreprise de démonstration fournis (anglais + russe -- tarifs, SLA,
+sécurité, politique de remboursement, FAQ support) plutôt que d'ouvrir sur une
+zone de dépôt vide. Cela n'alimente jamais qu'une base de connaissances *vide*
+: dès que vous avez importé vos propres documents, cela devient un no-op
+permanent. Réglez-le sur `false` dans `docker-compose.yml` (ou `docker run -e
+COGNIVORE_SEED_DEMO_KB=false`) pour démarrer à vide, ou lancez `cognivore
+seed-demo` à tout moment pour ajouter ces mêmes documents de démonstration à
+un store déjà existant.
+
 **Vous avez déjà Ollama qui tourne sur l'hôte, ou vous voulez un seul
 conteneur ?**
 
@@ -191,6 +202,7 @@ docker pull ghcr.io/anton-sergeev-ea/cognivore:latest
 ```bash
 cognivore chat                              # REPL interactif
 cognivore ingest ./docs                     # indexe récursivement les .txt/.md/.markdown/.rst
+cognivore seed-demo                         # ajoute les manuels de démonstration EN+RU fournis
 cognivore serve --host 0.0.0.0 --port 8420  # interface web + API REST/SSE
 cognivore bench                             # benchmarks de construction/recherche d'index (voir plus bas)
 ```

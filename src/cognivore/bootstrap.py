@@ -8,6 +8,7 @@ from __future__ import annotations
 import importlib.util
 import logging
 import os
+from pathlib import Path
 
 from cognivore.agent.core import Agent
 from cognivore.agent.memory import ConversationBuffer, VectorMemory
@@ -110,6 +111,98 @@ def build_document_store(settings: Settings) -> DocumentStore:
         prefer_fastembed=settings.prefer_semantic_embedder,
     )
     return DocumentStore(embedder=embedder, use_approximate_index=settings.use_approximate_index)
+
+
+def load_or_build_document_store(
+    settings: Settings, store_dir: str | Path | None = None
+) -> DocumentStore:
+    """Restores the knowledge base persisted at ``store_dir`` (default:
+    ``settings.data_dir / "store"``), if one exists, so documents survive
+    across repeated runs. Falls back to a fresh, empty store if nothing
+    was saved yet, or if the saved store doesn't match the current
+    embedder configuration.
+
+    Both the web server and the CLI go through this single function --
+    ``cognivore ingest`` used to call ``build_document_store`` directly,
+    which built a fresh store every time and meant a *second* `ingest`
+    run silently discarded everything from the first one on save. Now
+    `ingest`, `seed-demo`, and `serve` all accumulate into the same
+    persisted store instead of stepping on each other.
+    """
+    store_dir = Path(store_dir) if store_dir is not None else settings.data_dir / "store"
+    if (store_dir / "meta.json").exists():
+        try:
+            embedder = build_document_store(settings).embedder
+            store = DocumentStore.load(store_dir, embedder=embedder)
+            logger.info("Restored knowledge base from %s (%d chunks).", store_dir, len(store))
+            return store
+        except Exception:
+            logger.warning(
+                "Could not restore saved knowledge base at %s; starting fresh.",
+                store_dir,
+                exc_info=True,
+            )
+    return build_document_store(settings)
+
+
+# Labels shown as each chunk's "source" in the web UI's trace view and in
+# search_knowledge_base results -- kept here (not derived from the
+# filename) so a file rename can't silently change what the user sees.
+_DEMO_CONTENT_LABELS = {
+    "company_kb_en.md": "Skylark Cloud demo knowledge base (EN)",
+    "company_kb_ru.md": "NordCloud demo knowledge base (RU)",
+}
+
+
+def seed_demo_knowledge_base(store: DocumentStore, settings: Settings) -> int:
+    """Adds the bundled demo company handbooks (English + Russian fictional
+    SaaS companies -- pricing, SLA, security, refund policy, support FAQ)
+    to ``store``, so a brand-new install or a fresh container has something
+    substantive to search and ask about immediately, in more than one
+    language, with zero setup.
+
+    The files are packaged as ``cognivore.demo_content`` data (declared in
+    ``pyproject.toml``'s ``[tool.setuptools.package-data]``), so this works
+    identically from a source checkout, a built wheel, or inside the
+    Docker image -- there's no dependency on a project-root file layout
+    being present on disk. Returns the total number of chunks added; logs
+    and returns 0 rather than raising if the package data can't be read,
+    since a missing demo doc should never be the reason the server fails
+    to start.
+
+    Idempotent: a demo doc already present in ``store`` (by its source
+    label) is skipped rather than added again, so calling this more than
+    once against the same store (e.g. running ``cognivore seed-demo``
+    twice) never duplicates chunks.
+    """
+    import importlib.resources as resources
+
+    total = 0
+    try:
+        demo_dir = resources.files("cognivore.demo_content")
+    except (ModuleNotFoundError, FileNotFoundError):
+        logger.warning("Demo content package not found; skipping knowledge-base seeding.")
+        return 0
+
+    existing_sources = store.sources()
+    for filename, label in _DEMO_CONTENT_LABELS.items():
+        if label in existing_sources:
+            logger.info("Demo doc %r already present; skipping.", label)
+            continue
+        try:
+            text = (demo_dir / filename).read_text(encoding="utf-8")
+        except (FileNotFoundError, OSError):
+            logger.warning("Demo doc %s not found in package data; skipping.", filename)
+            continue
+        ids = store.add_text(
+            text,
+            source=label,
+            chunk_size=settings.chunk_size,
+            chunk_overlap=settings.chunk_overlap,
+        )
+        total += len(ids)
+        logger.info("Seeded demo doc %r: %d chunks.", label, len(ids))
+    return total
 
 
 def _is_importable(module_name: str) -> bool:
