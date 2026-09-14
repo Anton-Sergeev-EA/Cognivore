@@ -197,6 +197,20 @@ Ollama 的模型一样，该模型会被缓存在持久化的 `cognivore-data` �
 （`HF_HOME=/data/hf-cache`），因此只会下载一次，而不是每次执行
 `docker compose up --build` 都重新下载一遍。
 
+**停止与重新启动**（例如重启主机之后）：
+
+```bash
+docker compose down   # 停止两个容器；数据会被保留（见下文）
+docker compose up -d  # 重新启动 —— 除非镜像本身发生变化，否则无需 --build
+```
+
+两个服务都设置为 `restart: unless-stopped`，因此如果你在关闭之前没有手
+动停止它们，一旦 Docker 守护进程重新启动（这在大多数安装方式下是默认行
+为），Docker 会自动把它们重新启动 —— 这种情况下完全不需要执行任何命令。
+知识库以及缓存的 Whisper/Ollama 模型保存在名为 `cognivore-data` 和
+`ollama-data` 的数据卷中，`docker compose down` 永远不会动这两个数据卷；
+只有显式执行 `docker compose down -v` 才会删除它们。
+
 **预构建镜像（完全无需构建步骤）：** 带标签的发布版本会以多架构形式
 （amd64 + arm64 —— 包括 Apple Silicon 和 Raspberry Pi）发布到 GHCR，
 构建流程见

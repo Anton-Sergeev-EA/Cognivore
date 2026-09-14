@@ -59,6 +59,14 @@ project uses [Semantic Versioning](https://semver.org/).
   the Docker image. Idempotent and never touches a knowledge base that
   already has real content in it.
 
+### Changed
+
+- README.md (and all 8 translations): documented the `docker compose down`
+  / `up -d` stop-and-restart flow, that `restart: unless-stopped` brings
+  both containers back on their own after a reboot if they weren't stopped
+  manually first, and that `cognivore-data`/`ollama-data` survive `down`
+  (only an explicit `down -v` removes them).
+
 ### Fixed
 
 - On-screen text OCR in the video tool (`analyze_video`) silently produced

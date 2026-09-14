@@ -213,6 +213,20 @@ llama-cpp-python はすべてのプラットフォーム向けのビルド済み
 ボリューム(`HF_HOME=/data/hf-cache`)にキャッシュされるため、`docker compose up
 --build` のたびにではなく、一度だけダウンロードされます。
 
+**停止と再起動**(例:再起動後):
+
+```bash
+docker compose down   # 両方のコンテナを停止する。データは保持される(下記参照)
+docker compose up -d  # 再度起動する —— イメージ自体が変わっていない限り --build は不要
+```
+
+両方のサービスは `restart: unless-stopped` に設定されているため、シャットダウン前に
+手動で停止していなければ、Docker デーモンが復帰した時点で(ほとんどの環境ではこれが
+デフォルトです)Docker が自動的に再起動します —— その場合はコマンドは一切不要です。
+ナレッジベースと、キャッシュされた Whisper/Ollama のモデルは、名前付きボリューム
+`cognivore-data` と `ollama-data` に格納されており、`docker compose down` はこれらに
+触れません。明示的に `docker compose down -v` を実行した場合のみ削除されます。
+
 **ビルド済みイメージ(ビルド手順が一切不要):** タグ付きリリースは、
 [`.github/workflows/docker-publish.yml`](../../.github/workflows/docker-publish.yml)
 によってマルチアーキテクチャ(amd64 + arm64 —— Apple Silicon と Raspberry Pi を含む)で

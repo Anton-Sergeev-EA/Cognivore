@@ -225,6 +225,22 @@ comando explícito. Igual que los modelos de Ollama, se cachea en el volumen
 persistido `cognivore-data` (`HF_HOME=/data/hf-cache`), así que solo se
 descarga una vez, no en cada `docker compose up --build`.
 
+**Detener y reiniciar** (por ejemplo, tras un reinicio del sistema):
+
+```bash
+docker compose down   # detiene ambos contenedores; los datos se conservan (ver más abajo)
+docker compose up -d  # vuelve a arrancar -- no hace falta --build salvo que la imagen misma haya cambiado
+```
+
+Ambos servicios están configurados con `restart: unless-stopped`, así que si
+no los detuviste manualmente antes de apagar el sistema, Docker los reinicia
+por su cuenta en cuanto el daemon de Docker vuelve a arrancar (lo habitual en
+la mayoría de instalaciones) -- en ese caso no hace falta ningún comando en
+absoluto. La base de conocimiento y los modelos de Whisper/Ollama cacheados
+viven en los volúmenes con nombre `cognivore-data` y `ollama-data`, que
+`docker compose down` nunca toca; solo un `docker compose down -v` explícito
+los elimina.
+
 **Imagen preconstruida (sin ningún paso de build):** las releases
 etiquetadas se publican multi-arquitectura (amd64 + arm64 -- incluyendo
 Apple Silicon y Raspberry Pi) en GHCR mediante
