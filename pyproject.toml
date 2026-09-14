@@ -72,6 +72,7 @@ where = ["src"]
 [tool.setuptools.package-data]
 "cognivore" = ["py.typed", "_native.pyi"]
 "cognivore.web" = ["static/*"]
+"cognivore.demo_content" = ["*.md"]
 
 [tool.ruff]
 line-length = 100

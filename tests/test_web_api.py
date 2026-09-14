@@ -17,6 +17,39 @@ def client(tmp_path: Path) -> TestClient:
     return TestClient(app)
 
 
+def test_seed_demo_kb_seeds_a_fresh_store_on_startup(tmp_path: Path) -> None:
+    settings = Settings(
+        data_dir=tmp_path / ".cognivore",
+        prefer_semantic_embedder=False,
+        seed_demo_kb=True,
+    )
+    app = create_app(settings)
+    client = TestClient(app)
+
+    res = client.get("/api/health")
+    assert res.status_code == 200
+    assert res.json()["knowledge_base_chunks"] > 0
+
+
+def test_seed_demo_kb_never_touches_an_already_populated_store(tmp_path: Path) -> None:
+    data_dir = tmp_path / ".cognivore"
+
+    # First server run: seeding is off, but the user ingests their own doc.
+    settings = Settings(data_dir=data_dir, prefer_semantic_embedder=False, seed_demo_kb=False)
+    app = create_app(settings)
+    app.state.store.add_text("my own private notes", source="notes.md")
+    app.state.store.save(data_dir / "store")
+    own_chunk_count = len(app.state.store)
+
+    # Second run: seeding is now on, but the store already has content, so
+    # it must be left alone rather than having demo docs merged in.
+    settings2 = Settings(data_dir=data_dir, prefer_semantic_embedder=False, seed_demo_kb=True)
+    app2 = create_app(settings2)
+    client2 = TestClient(app2)
+    res = client2.get("/api/health")
+    assert res.json()["knowledge_base_chunks"] == own_chunk_count
+
+
 def test_health_endpoint(client: TestClient) -> None:
     res = client.get("/api/health")
     assert res.status_code == 200

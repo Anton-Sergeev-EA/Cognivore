@@ -134,6 +134,21 @@ docker compose exec ollama ollama pull qwen2.5:3b   # 一度だけ実行、約2G
 問題なく起動・動作します —— モデルが利用可能になるまで、単にオフラインの
 `FakeLLMBackend` デモモードにフォールバックするだけです。
 
+compose スタックは `COGNIVORE_SEED_DEMO_KB=true`
+も設定しているため、新規のナレッジベースには、空
+のドロップゾーンではなく、同梱の2つのデモ企業ハ
+ンドブック(英語+ロシア語 —— 料金プラン、SLA、セ
+キュリティ、返金ポリシー、サポートFAQ)が自動的に
+投入されます。投入されるのは常に *空* のナレッジ
+ベースのみです。自分のドキュメントを取り込んだ後
+は、これは永続的に何もしない操作になります。空の
+状態で起動したい場合は `docker-compose.yml` でこ
+れを `false` に設定してください(または
+`docker run -e COGNIVORE_SEED_DEMO_KB=false`)。
+あるいは、いつでも `cognivore seed-demo` を実行
+すれば、既存のストアに同じデモドキュメントを追加
+できます。
+
 **すでにホスト上で Ollama を動かしている、あるいは単一のコンテナだけにしたい場合は?**
 
 ```bash
@@ -172,6 +187,7 @@ docker pull ghcr.io/anton-sergeev-ea/cognivore:latest
 ```bash
 cognivore chat                              # 対話型 REPL
 cognivore ingest ./docs                     # .txt/.md/.markdown/.rst を再帰的にインデックス化
+cognivore seed-demo                         # 同梱の英語+ロシア語デモ企業ハンドブックを追加
 cognivore serve --host 0.0.0.0 --port 8420  # Web UI + REST/SSE API
 cognivore bench                             # インデックスの構築/検索ベンチマーク(下記参照)
 ```

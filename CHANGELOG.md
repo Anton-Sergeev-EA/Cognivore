@@ -51,8 +51,23 @@ project uses [Semantic Versioning](https://semver.org/).
   every translation, only prose and table headers translated. `LICENSE`
   now names the author (Sergeev Anton, avsergeev1981@gmail.com).
 
+- `COGNIVORE_SEED_DEMO_KB` / `cognivore seed-demo`: an empty knowledge base
+  can now be seeded automatically (Docker Compose does this by default) or
+  on demand with two bundled demo company handbooks (English + Russian --
+  pricing, SLA, security, refund policy, support FAQ), packaged as
+  installed package data so it works identically from source, a wheel, or
+  the Docker image. Idempotent and never touches a knowledge base that
+  already has real content in it.
+
 ### Fixed
 
+- `cognivore ingest` (and the CLI generally) built a brand-new, empty
+  `DocumentStore` on every invocation instead of loading whatever was
+  already persisted at `store_dir` -- confirmed by writing a regression
+  test for it -- so a *second* `ingest` run silently discarded everything
+  a first one had saved. All store-loading (CLI and web server alike) now
+  goes through one shared `load_or_build_document_store()` so this can't
+  drift apart again.
 - Docker image build: the runtime stage installed the `[all]` extra,
   which pulls in `llama-cpp-python` -- confirmed live, this has no
   prebuilt wheel for some platform/Python combinations and falls back to

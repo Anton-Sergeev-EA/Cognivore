@@ -137,6 +137,16 @@ that one-time `ollama pull`, Cognivore still starts and runs fine -- it
 just falls back to the offline `FakeLLMBackend` demo mode until a model is
 available.
 
+The compose stack also sets `COGNIVORE_SEED_DEMO_KB=true`, so a fresh
+knowledge base is seeded automatically with two bundled demo company
+handbooks (English + Russian -- pricing, SLA, security, refund policy,
+support FAQ) instead of opening to an empty dropzone. It only ever seeds
+an *empty* knowledge base: once you've ingested your own documents, this
+is a permanent no-op. Set it to `false` in `docker-compose.yml` (or
+`docker run -e COGNIVORE_SEED_DEMO_KB=false`) to start empty instead, or
+run `cognivore seed-demo` yourself at any time to add the same demo docs
+to an existing store on demand.
+
 **Already have Ollama running on the host, or want a single container?**
 
 ```bash
@@ -174,6 +184,7 @@ docker pull ghcr.io/anton-sergeev-ea/cognivore:latest
 ```bash
 cognivore chat                              # interactive REPL
 cognivore ingest ./docs                     # recursively indexes .txt/.md/.markdown/.rst
+cognivore seed-demo                         # adds the bundled EN+RU demo company handbooks
 cognivore serve --host 0.0.0.0 --port 8420  # web UI + REST/SSE API
 cognivore bench                             # index build/search benchmarks (see below)
 ```

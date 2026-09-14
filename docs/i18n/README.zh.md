@@ -124,6 +124,19 @@ docker compose exec ollama ollama pull qwen2.5:3b   # 仅需一次，约 2GB
 行那一次性的 `ollama pull`，Cognivore 依然能正常启动并运行 —— 只是在
 有可用模型之前会回退到离线的 `FakeLLMBackend` 演示模式。
 
+compose 方案还设置了
+`COGNIVORE_SEED_DEMO_KB=true`，因此全新的知识
+库会自动填充两份内置的演示公司手册（英文 + 俄
+文——价格方案、SLA、安全、退款政策、支持常见问
+题），而不是打开一个空的拖放区。它只会填充 *空
+* 的知识库：一旦你导入了自己的文档，这就永久变
+成空操作。可以在 `docker-compose.yml` 中将其设
+为 `false`（或使用
+`docker run -e COGNIVORE_SEED_DEMO_KB=false`）
+以空知识库启动，也可以随时运行
+`cognivore seed-demo`，把同样的演示文档添加到
+已有的知识库中。
+
 **已经在主机上运行了 Ollama，或者只想要一个容器？**
 
 ```bash
@@ -161,6 +174,7 @@ docker pull ghcr.io/anton-sergeev-ea/cognivore:latest
 ```bash
 cognivore chat                              # 交互式 REPL
 cognivore ingest ./docs                     # 递归索引 .txt/.md/.markdown/.rst 文件
+cognivore seed-demo                         # 添加内置的英文+俄文演示公司手册
 cognivore serve --host 0.0.0.0 --port 8420  # 网页界面 + REST/SSE API
 cognivore bench                             # 索引构建/搜索基准测试（见下文）
 ```
