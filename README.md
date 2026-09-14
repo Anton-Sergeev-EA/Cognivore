@@ -125,15 +125,25 @@ On-screen text extraction in the video tool (`analyze_video`) needs the
 well -- the `pytesseract` package pulled in by the `video` extra is just a
 thin wrapper around it, and OCR silently returns no text without it (scene
 detection and timestamps still work either way, since that part is pure
-OpenCV):
+OpenCV). By default it recognizes English *and* Russian (`eng+rus`, see
+`COGNIVORE_OCR_LANGUAGES` in `.env.example`) -- on Debian/Ubuntu the plain
+`tesseract-ocr` package pulls in `eng` automatically but not `rus`, so
+install both explicitly:
 
 ```bash
-sudo apt install tesseract-ocr        # Debian/Ubuntu
-brew install tesseract                # macOS
-# Windows: https://github.com/UB-Mannheim/tesseract/wiki
+sudo apt install tesseract-ocr tesseract-ocr-rus   # Debian/Ubuntu
+brew install tesseract                              # macOS -- ships every language together
+# Windows: https://github.com/UB-Mannheim/tesseract/wiki (tick Russian in the installer's language list)
 ```
 
-The Docker image already includes it -- nothing to install there.
+The Docker image already includes both -- nothing to install there.
+
+Requesting a language whose trained-data package isn't installed doesn't
+error out -- it silently mis-recognizes that script as look-alike Latin
+letters (Cyrillic "Контейнеры" comes out as "KoHTewHepbi"), which reads
+like a bad scan rather than a missing language pack. If your on-screen
+text uses another language, install its `tesseract-ocr-<lang>` package
+and add it to `COGNIVORE_OCR_LANGUAGES` (e.g. `eng+rus+deu`).
 
 ### Docker
 

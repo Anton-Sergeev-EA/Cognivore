@@ -26,12 +26,19 @@ WORKDIR /app
 # via the `video` extra) shells out to -- the Python package alone can't do
 # OCR without it. Without this, on-screen text extraction in `analyze_video`
 # silently returns "" (the scene-detection/timestamps part still works, since
-# that's pure OpenCV). eng is the only trained-language pack pulled in, to
-# keep the image small; add more `tesseract-ocr-<lang>` packages here if
-# on-screen text in other languages needs to be recognized.
+# that's pure OpenCV). eng+rus matches this project's two primary languages
+# (see COGNIVORE_OCR_LANGUAGES / Settings.ocr_languages) -- confirmed live,
+# requesting a language whose trained-data package isn't installed doesn't
+# error out, it just quietly mis-recognizes that script as look-alike Latin
+# letters (e.g. Cyrillic "Контейнеры" read as "KoHTewHepbi"), which reads
+# like a low-quality scan rather than a missing language pack. So: if a
+# deployment's on-screen text uses another language, add its
+# `tesseract-ocr-<lang>` package here *and* that language to
+# COGNIVORE_OCR_LANGUAGES, or it'll get silently garbled the same way.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     tesseract-ocr-eng \
+    tesseract-ocr-rus \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /build/dist/*.whl /tmp/
 # Deliberately `[audio,video]`, not `[all]`. `[all]` also pulls in `llm`

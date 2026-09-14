@@ -73,6 +73,20 @@ project uses [Semantic Versioning](https://semver.org/).
   requirement for native (non-Docker) installs, and adding real,
   non-mocked test coverage (`tests/test_video.py`) that exercises OCR
   end-to-end against a synthetic video with burned-in text.
+- On-screen OCR was hardcoded to English-only, so Cyrillic text (a Russian
+  terminal or UI in a screen recording, say) came back mis-recognized as
+  look-alike Latin letters -- e.g. "Контейнеры запущены" as "KoHTewHepbi
+  3anylueHbl" -- confirmed live, and easy to mistake for a bad-quality scan
+  rather than a language mismatch, since Tesseract doesn't error out on a
+  wrong-language request, it just quietly reads the wrong alphabet. Fixed
+  by adding a new `ocr_languages` setting (`COGNIVORE_OCR_LANGUAGES`,
+  default `"eng+rus"`, threaded through `VideoAnalyzeTool` ->
+  `extract_keyframes` -> `_ocr_frame`), installing `tesseract-ocr-rus` in
+  the Docker image alongside `tesseract-ocr-eng`, documenting the
+  install step (and the silent-mismatch pitfall) for native installs, and
+  adding a real regression test pair in `tests/test_video.py` that OCRs
+  actual Cyrillic text and confirms it comes back correctly with the new
+  default but garbled when forced to `eng`-only.
 - Docker image: the `faster-whisper` speech-recognition model has no
   dedicated cache volume (unlike Ollama's `ollama-data`), so its
   Hugging Face model cache landed in the container's throwaway home

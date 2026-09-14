@@ -122,16 +122,26 @@ cognivore chat           # 動作中の Ollama サーバーを自動的に検出
 必要です —— `video` extra が導入する `pytesseract` パッケージは、あくまで
 その薄いラッパーに過ぎず、これが無いと OCR は何も検出できず黙って空の結果を
 返します(シーン検出とタイムスタンプは純粋な OpenCV の処理なので、いずれの
-場合でも問題なく動作します):
+場合でも問題なく動作します)。デフォルトでは英語*と*ロシア語(`eng+rus`、
+`.env.example` の `COGNIVORE_OCR_LANGUAGES` を参照)を認識します —— Debian/Ubuntu
+では素の `tesseract-ocr` パッケージが `eng` を自動的に導入しますが `rus` は
+導入しないため、両方を明示的にインストールしてください:
 
 ```bash
-sudo apt install tesseract-ocr        # Debian/Ubuntu
-brew install tesseract                # macOS
-# Windows: https://github.com/UB-Mannheim/tesseract/wiki
+sudo apt install tesseract-ocr tesseract-ocr-rus   # Debian/Ubuntu
+brew install tesseract                              # macOS —— すべての言語がまとめて入ります
+# Windows: https://github.com/UB-Mannheim/tesseract/wiki(インストーラーの言語一覧でロシア語にチェック)
 ```
 
-Docker イメージには最初から含まれているため、そちらでは何もインストールする
-必要はありません。
+Docker イメージには両方とも最初から含まれているため、そちらでは何もインストール
+する必要はありません。
+
+学習済みデータパッケージが入っていない言語を指定してもエラーにはならず ——
+その文字種を見た目が似ているラテン文字として黙って誤認識します(キリル文字の
+「Контейнеры」は「KoHTewHepbi」になります)。これは言語パックの欠落というより、
+スキャン品質が悪いように見えます。画面内テキストが別の言語を使っている場合は、
+対応する `tesseract-ocr-<lang>` パッケージをインストールし、
+`COGNIVORE_OCR_LANGUAGES` に追加してください(例:`eng+rus+deu`)。
 
 ### Docker
 

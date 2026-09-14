@@ -131,15 +131,28 @@ die [Tesseract](https://github.com/tesseract-ocr/tesseract)-OCR-*Binary*
 selbst -- das über das `video`-Extra installierte `pytesseract`-Paket ist
 nur ein dünner Wrapper darum und liefert ohne die Binary stillschweigend
 keinen Text (Szenenerkennung und Zeitstempel funktionieren trotzdem, da
-dieser Teil rein auf OpenCV beruht):
+dieser Teil rein auf OpenCV beruht). Standardmäßig erkennt sie Englisch
+*und* Russisch (`eng+rus`, siehe `COGNIVORE_OCR_LANGUAGES` in
+`.env.example`) -- auf Debian/Ubuntu zieht das einfache Paket
+`tesseract-ocr` automatisch `eng` nach, aber nicht `rus`, deshalb beide
+explizit installieren:
 
 ```bash
-sudo apt install tesseract-ocr        # Debian/Ubuntu
-brew install tesseract                # macOS
-# Windows: https://github.com/UB-Mannheim/tesseract/wiki
+sudo apt install tesseract-ocr tesseract-ocr-rus   # Debian/Ubuntu
+brew install tesseract                              # macOS -- liefert alle Sprachen zusammen
+# Windows: https://github.com/UB-Mannheim/tesseract/wiki (in der Sprachliste des Installers Russisch ankreuzen)
 ```
 
-Das Docker-Image bringt sie bereits mit -- dort ist nichts zu installieren.
+Das Docker-Image bringt beide bereits mit -- dort ist nichts zu installieren.
+
+Fordert man eine Sprache an, deren Trainingsdaten-Paket nicht installiert
+ist, gibt es keinen Fehler -- die Schrift wird stillschweigend als
+ähnlich aussehende lateinische Buchstaben fehlerkannt (aus dem
+kyrillischen "Контейнеры" wird "KoHTewHepbi"), was eher wie ein
+schlechter Scan als wie ein fehlendes Sprachpaket wirkt. Verwendet Ihr
+Bildschirmtext eine andere Sprache, installieren Sie deren Paket
+`tesseract-ocr-<lang>` und fügen Sie sie zu `COGNIVORE_OCR_LANGUAGES`
+hinzu (z. B. `eng+rus+deu`).
 
 ### Docker
 
