@@ -42,6 +42,15 @@ project uses [Semantic Versioning](https://semver.org/).
   non-root) on every push; tagged releases publish a multi-arch
   (amd64/arm64) image to GHCR via `docker-publish.yml`.
 
+- Documentation: a rewritten `README.md` with a new `## Usage` section
+  (CLI, Web UI, REST/SSE API, and library-usage examples, verified against
+  the actual `cli.py`/`web/app.py`/`bootstrap.py` source), plus a full
+  technical translation of it into all 8 other UI languages
+  (`docs/i18n/README.<lang>.md` for ru, de, fr, it, es, zh, ja, hi) --
+  code blocks, commands, paths, and benchmark numbers kept verbatim in
+  every translation, only prose and table headers translated. `LICENSE`
+  now names the author (Sergeev Anton, avsergeev1981@gmail.com).
+
 ### Fixed
 
 - Docker image build: the runtime stage installed the `[all]` extra,
