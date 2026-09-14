@@ -68,7 +68,8 @@ cuando faltan dependencias opcionales) están implementadas, no importadas.
 - **Herramientas multimodales**: calculadora segura (basada en AST, sin
   `eval`), búsqueda en la base de conocimiento, transcripción de audio con
   segmentación aproximada por hablante (`faster-whisper`), y detección de
-  escenas en vídeo + OCR (OpenCV) -- todo solo con CPU, sin PyTorch.
+  escenas en vídeo (OpenCV) + OCR de texto en pantalla (Tesseract) -- todo
+  solo con CPU, sin PyTorch.
 - **Backend de LLM enchufable**: inferencia local GGUF mediante
   `llama-cpp-python`, o un `FakeLLMBackend` determinista y sin
   dependencias que ejerce exactamente la misma ruta de código de invocación
@@ -125,6 +126,22 @@ Las herramientas de audio/vídeo necesitan sus propios extras:
 `pip install -e ".[audio,video]"` (o `.[all]` para todo, GGUF incluido).
 Consulta `.env.example` para ver todas las opciones de configuración.
 
+La extracción de texto en pantalla de la herramienta de vídeo
+(`analyze_video`) necesita además el *binario* de OCR de
+[Tesseract](https://github.com/tesseract-ocr/tesseract) -- el paquete
+`pytesseract` que trae el extra `video` no es más que un envoltorio fino
+alrededor de él, y sin él el OCR no devuelve texto silenciosamente (la
+detección de escenas y las marcas de tiempo funcionan igual, ya que esa
+parte es puro OpenCV):
+
+```bash
+sudo apt install tesseract-ocr        # Debian/Ubuntu
+brew install tesseract                # macOS
+# Windows: https://github.com/UB-Mannheim/tesseract/wiki
+```
+
+La imagen de Docker ya lo incluye -- no hay nada que instalar ahí.
+
 ### Docker
 
 La imagen se construye en varias etapas (compila la extensión nativa en
@@ -180,7 +197,8 @@ ese mismo comando también funcione en Linux tal cual, donde de otro modo
 ese nombre no se resolvería.
 
 La imagen incluye las herramientas de audio/vídeo (`faster-whisper`,
-OpenCV) pero *no* `llama-cpp-python` -- se comunica con Ollama por HTTP
+OpenCV, y Tesseract para el OCR de texto en pantalla) pero *no*
+`llama-cpp-python` -- se comunica con Ollama por HTTP
 normal en lugar de cargar un archivo GGUF en el propio proceso,
 deliberadamente, ya que `llama-cpp-python` no tiene una wheel prebuilt para
 todas las plataformas y necesita un compilador que la etapa de runtime no

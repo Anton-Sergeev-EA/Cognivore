@@ -58,7 +58,8 @@ backoff. 15% of that is 750ms.
   BM25 混合检索。
 - **多模态工具**：安全的（基于 AST，不使用 `eval`）计算器、知识库搜索、
   音频转录 + 粗略的说话人轮次划分（`faster-whisper`），以及视频场景检
-  测 + OCR（OpenCV）—— 全部仅需 CPU，无需 PyTorch。
+  测（OpenCV）+ 屏幕文字 OCR 识别（Tesseract）—— 全部仅需 CPU，无需
+  PyTorch。
 - **可插拔的 LLM 后端**：通过 `llama-cpp-python` 进行本地 GGUF 推理，
   或使用确定性、零依赖的 `FakeLLMBackend`，它无需任何下载即可走完完全
   相同的工具调用代码路径 —— 测试套件和 CI 正是针对它运行的。
@@ -107,6 +108,20 @@ cognivore chat           # 会自动识别正在运行的 Ollama 服务器
 
 音频/视频工具需要单独的 extras：`pip install -e ".[audio,video]"`（或
 使用 `.[all]` 安装全部内容，包括 GGUF）。所有配置项详见 `.env.example`。
+
+视频工具中的屏幕文字提取功能（`analyze_video`）还需要
+[Tesseract](https://github.com/tesseract-ocr/tesseract) OCR *二进制程
+序* 本身——`video` extra 拉取的 `pytesseract` 包只是它的一层薄封装，
+缺少这个二进制程序时 OCR 会静默地返回空文本（场景检测和时间戳不受影
+响，仍能照常工作，因为那部分完全由 OpenCV 完成）：
+
+```bash
+sudo apt install tesseract-ocr        # Debian/Ubuntu
+brew install tesseract                # macOS
+# Windows: https://github.com/UB-Mannheim/tesseract/wiki
+```
+
+Docker 镜像已经内置了它，无需额外安装。
 
 ### Docker
 
@@ -158,7 +173,8 @@ docker run -d -p 8420:8420 -v cognivore-data:/data \
 供；上面那条显式的 `--add-host` 正是让同一条命令在普通 Linux 上也能生
 效的原因，否则这个名字在那里无法解析。
 
-该镜像内置了音频/视频工具（`faster-whisper`、OpenCV），但*不*包含
+该镜像内置了音频/视频工具（`faster-whisper`、OpenCV，以及用于屏幕文
+字 OCR 的 Tesseract），但*不*包含
 `llama-cpp-python` —— 它是有意选择通过普通 HTTP 与 Ollama 通信来处理
 LLM，而不是在进程内加载 GGUF 文件，因为 llama-cpp-python 并非对每个平
 台都提供预构建的 wheel，而且需要运行时阶段并不具备的编译器。仍然想在容

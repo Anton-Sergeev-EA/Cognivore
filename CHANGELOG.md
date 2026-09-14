@@ -61,6 +61,18 @@ project uses [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- On-screen text OCR in the video tool (`analyze_video`) silently produced
+  no text at all: `pytesseract` was never declared as a dependency (in
+  the `video` extra or anywhere else), so `_ocr_frame`'s `import
+  pytesseract` always raised `ImportError`, which was caught and returned
+  as `""` -- indistinguishable from "this frame just has no text on it."
+  Scene detection and timestamps were unaffected (pure OpenCV), which is
+  what made the gap easy to miss. Fixed by adding `pytesseract` to the
+  `video` extra, installing the native `tesseract-ocr` binary it wraps in
+  the Docker image's runtime stage, documenting the same binary
+  requirement for native (non-Docker) installs, and adding real,
+  non-mocked test coverage (`tests/test_video.py`) that exercises OCR
+  end-to-end against a synthetic video with burned-in text.
 - `cognivore ingest` (and the CLI generally) built a brand-new, empty
   `DocumentStore` on every invocation instead of loading whatever was
   already persisted at `store_dir` -- confirmed by writing a regression

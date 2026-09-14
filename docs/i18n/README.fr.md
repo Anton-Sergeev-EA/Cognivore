@@ -70,8 +70,8 @@ optionnelles) sont implémentées plutôt qu'importées.
 - **Outils multimodaux** : calculatrice sûre (basée sur l'AST, sans
   `eval`), recherche dans la base de connaissances, transcription audio +
   segmentation approximative par locuteur (`faster-whisper`), et
-  détection de scènes vidéo + OCR (OpenCV) -- tout cela sur CPU
-  uniquement, sans PyTorch.
+  détection de scènes vidéo (OpenCV) + OCR du texte à l'écran (Tesseract)
+  -- tout cela sur CPU uniquement, sans PyTorch.
 - **Backend LLM interchangeable** : inférence locale au format GGUF via
   `llama-cpp-python`, ou un `FakeLLMBackend` déterministe et sans
   dépendance qui exerce exactement le même chemin de code d'appel
@@ -127,6 +127,22 @@ cognivore chat           # détecte automatiquement le serveur Ollama en cours d
 Les outils audio/vidéo nécessitent leurs propres extras :
 `pip install -e ".[audio,video]"` (ou `.[all]` pour tout avoir, GGUF
 compris). Voir `.env.example` pour la liste complète des réglages.
+
+L'extraction du texte à l'écran dans l'outil vidéo (`analyze_video`)
+nécessite en plus le *binaire* OCR
+[Tesseract](https://github.com/tesseract-ocr/tesseract) -- le paquet
+`pytesseract` installé par l'extra `video` n'en est qu'un fin wrapper, et
+sans lui l'OCR ne renvoie silencieusement aucun texte (la détection de
+scènes et les horodatages continuent malgré tout de fonctionner, car
+cette partie repose uniquement sur OpenCV) :
+
+```bash
+sudo apt install tesseract-ocr        # Debian/Ubuntu
+brew install tesseract                # macOS
+# Windows : https://github.com/UB-Mannheim/tesseract/wiki
+```
+
+L'image Docker l'embarque déjà -- rien à installer de ce côté-là.
 
 ### Docker
 
@@ -184,8 +200,8 @@ docker run -d -p 8420:8420 -v cognivore-data:/data \
 la même commande de fonctionner aussi sur Linux classique, où ce nom ne
 se résout sinon pas.
 
-L'image embarque les outils audio/vidéo (`faster-whisper`, OpenCV) mais
-*pas* `llama-cpp-python` -- elle communique avec Ollama en HTTP simple
+L'image embarque les outils audio/vidéo (`faster-whisper`, OpenCV, et
+Tesseract pour l'OCR du texte à l'écran) mais *pas* `llama-cpp-python` -- elle communique avec Ollama en HTTP simple
 pour la LLM plutôt que de charger un fichier GGUF directement dans le
 processus, et ce délibérément, car llama-cpp-python n'a pas de wheel
 précompilée pour chaque plateforme et nécessite un compilateur que

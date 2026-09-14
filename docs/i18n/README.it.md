@@ -70,8 +70,8 @@ semplicemente importate.
 - **Strumenti multimodali**: calcolatrice sicura (basata su AST, senza
   `eval`), ricerca nella base di conoscenza, trascrizione audio con
   separazione approssimativa per parlante (`faster-whisper`) e
-  rilevamento delle scene video + OCR (OpenCV) -- tutto solo su CPU,
-  senza PyTorch.
+  rilevamento delle scene video (OpenCV) + OCR del testo a schermo
+  (Tesseract) -- tutto solo su CPU, senza PyTorch.
 - **Backend LLM collegabile**: inferenza locale GGUF tramite
   `llama-cpp-python`, oppure un `FakeLLMBackend` deterministico e senza
   dipendenze che percorre esattamente lo stesso codice di tool-calling
@@ -127,6 +127,21 @@ Gli strumenti audio/video richiedono i propri extra:
 `pip install -e ".[audio,video]"` (oppure `.[all]` per tutto, GGUF
 incluso). Consultate `.env.example` per tutte le impostazioni.
 
+L'estrazione del testo a schermo nello strumento video (`analyze_video`)
+richiede anche il *binario* OCR [Tesseract](https://github.com/tesseract-ocr/tesseract) --
+il package `pytesseract` incluso dall'extra `video` è solo un sottile
+wrapper attorno ad esso, e senza di esso l'OCR restituisce silenziosamente
+nessun testo (il rilevamento delle scene e i timestamp continuano invece
+a funzionare in ogni caso, poiché quella parte è puro OpenCV):
+
+```bash
+sudo apt install tesseract-ocr        # Debian/Ubuntu
+brew install tesseract                # macOS
+# Windows: https://github.com/UB-Mannheim/tesseract/wiki
+```
+
+L'immagine Docker lo include già -- niente da installare in quel caso.
+
 ### Docker
 
 L'immagine è una build multi-stage (compila l'estensione nativa in C++,
@@ -181,8 +196,8 @@ docker run -d -p 8420:8420 -v cognivore-data:/data \
 permette allo stesso comando di funzionare anche su Linux "puro", dove
 altrimenti questo nome non si risolverebbe.
 
-L'immagine include gli strumenti audio/video (`faster-whisper`, OpenCV)
-ma *non* `llama-cpp-python` -- comunica con Ollama tramite HTTP semplice
+L'immagine include gli strumenti audio/video (`faster-whisper`, OpenCV,
+e Tesseract per l'OCR del testo a schermo) ma *non* `llama-cpp-python` -- comunica con Ollama tramite HTTP semplice
 per l'LLM invece di caricare un file GGUF in-process, deliberatamente,
 poiché llama-cpp-python non ha una wheel precompilata per ogni
 piattaforma e richiede un compilatore che lo stage di runtime non porta

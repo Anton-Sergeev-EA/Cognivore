@@ -65,8 +65,8 @@ dependencies are missing) are implemented rather than imported.
   vector + BM25 hybrid retrieval.
 - **Multimodal tools**: safe (AST-based, no `eval`) calculator, knowledge-
   base search, audio transcription + rough speaker turns
-  (`faster-whisper`), and video scene-detection + OCR (OpenCV) -- all
-  CPU-only, no PyTorch.
+  (`faster-whisper`), and video scene-detection (OpenCV) + on-screen text
+  OCR (Tesseract) -- all CPU-only, no PyTorch.
 - **Pluggable LLM backend**: local GGUF inference via `llama-cpp-python`,
   or a deterministic, dependency-free `FakeLLMBackend` that exercises the
   exact same tool-calling code path with zero download -- what the test
@@ -120,6 +120,21 @@ Audio/video tools need their own extras: `pip install -e ".[audio,video]"`
 (or `.[all]` for everything, GGUF included). See `.env.example` for every
 setting.
 
+On-screen text extraction in the video tool (`analyze_video`) needs the
+[Tesseract](https://github.com/tesseract-ocr/tesseract) OCR *binary* as
+well -- the `pytesseract` package pulled in by the `video` extra is just a
+thin wrapper around it, and OCR silently returns no text without it (scene
+detection and timestamps still work either way, since that part is pure
+OpenCV):
+
+```bash
+sudo apt install tesseract-ocr        # Debian/Ubuntu
+brew install tesseract                # macOS
+# Windows: https://github.com/UB-Mannheim/tesseract/wiki
+```
+
+The Docker image already includes it -- nothing to install there.
+
 ### Docker
 
 The image is a multi-stage build (compiles the native C++ extension, then
@@ -170,8 +185,9 @@ docker run -d -p 8420:8420 -v cognivore-data:/data \
 (Windows/macOS); the explicit `--add-host` above is what makes the same
 command also work on plain Linux, where it otherwise doesn't resolve.
 
-The image ships the audio/video tools (`faster-whisper`, OpenCV) but *not*
-`llama-cpp-python` -- it talks to Ollama over plain HTTP for the LLM
+The image ships the audio/video tools (`faster-whisper`, OpenCV, and
+Tesseract for on-screen text OCR) but *not* `llama-cpp-python` -- it talks
+to Ollama over plain HTTP for the LLM
 instead of loading a GGUF file in-process, deliberately, since
 llama-cpp-python has no prebuilt wheel for every platform and needs a
 compiler the runtime stage doesn't carry. Want in-process GGUF inference

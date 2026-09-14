@@ -62,7 +62,8 @@ backoff. 15% of that is 750ms.
   フォールバック付き)、ベクトル検索 + BM25 のハイブリッド検索。
 - **マルチモーダルツール**:安全な(AST ベースで `eval` を使わない)計算機、ナレッジ
   ベース検索、音声の書き起こしと簡易的な話者ターン分割(`faster-whisper`)、動画の
-  シーン検出 + OCR(OpenCV)—— すべて CPU のみで動作し、PyTorch は不要です。
+  シーン検出(OpenCV) + 画面内テキストのOCR認識(Tesseract)—— すべて CPU のみで
+  動作し、PyTorch は不要です。
 - **差し替え可能な LLM バックエンド**:`llama-cpp-python` によるローカル GGUF 推論、
   または決定論的で依存関係のない `FakeLLMBackend`(ダウンロード不要で、まったく同じ
   ツール呼び出しのコードパスを実行します)—— テストスイートと CI はこちらを対象に
@@ -115,6 +116,22 @@ cognivore chat           # 動作中の Ollama サーバーを自動的に検出
 音声/動画ツールにはそれぞれ独自の extras が必要です:`pip install -e ".[audio,video]"`
 (GGUF を含めすべてが必要な場合は `.[all]`)。設定項目の一覧は `.env.example` を参照して
 ください。
+
+動画ツール(`analyze_video`)での画面内テキスト抽出には、
+[Tesseract](https://github.com/tesseract-ocr/tesseract) OCR *バイナリ*本体も
+必要です —— `video` extra が導入する `pytesseract` パッケージは、あくまで
+その薄いラッパーに過ぎず、これが無いと OCR は何も検出できず黙って空の結果を
+返します(シーン検出とタイムスタンプは純粋な OpenCV の処理なので、いずれの
+場合でも問題なく動作します):
+
+```bash
+sudo apt install tesseract-ocr        # Debian/Ubuntu
+brew install tesseract                # macOS
+# Windows: https://github.com/UB-Mannheim/tesseract/wiki
+```
+
+Docker イメージには最初から含まれているため、そちらでは何もインストールする
+必要はありません。
 
 ### Docker
 
@@ -170,7 +187,8 @@ docker run -d -p 8420:8420 -v cognivore-data:/data \
 上記の明示的な `--add-host` は、それが無ければ解決できない通常の Linux 上でも同じ
 コマンドを動作させるためのものです。
 
-このイメージには音声/動画ツール(`faster-whisper`、OpenCV)が含まれていますが、
+このイメージには音声/動画ツール(`faster-whisper`、OpenCV、そして画面内テキスト
+OCR 用の Tesseract)が含まれていますが、
 `llama-cpp-python` は*含まれていません* —— GGUF ファイルをプロセス内でロードする
 代わりに、LLM とのやり取りには通常の HTTP で Ollama と通信します。これは意図的な設計で、
 llama-cpp-python はすべてのプラットフォーム向けのビルド済みホイールを持っておらず、
