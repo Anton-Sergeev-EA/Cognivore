@@ -196,6 +196,13 @@ llama-cpp-python はすべてのプラットフォーム向けのビルド済み
 プロセス内 GGUF 推論を行いたい場合は、最終ステージに `build-essential` を追加し、
 `pip install` を `[all]` extra に切り替えてください。
 
+`faster-whisper` は、音声の書き起こしが実際に使われた最初のタイミングで(ビルド時
+ではなく)Hugging Face から音声認識モデルをダウンロードします。これは LLM 用の
+`ollama pull` と同じですが、違いは明示的なコマンドを必要とせず、初回利用時に自動的
+に行われる点です。Ollama のモデルと同様、これは永続化された `cognivore-data`
+ボリューム(`HF_HOME=/data/hf-cache`)にキャッシュされるため、`docker compose up
+--build` のたびにではなく、一度だけダウンロードされます。
+
 **ビルド済みイメージ(ビルド手順が一切不要):** タグ付きリリースは、
 [`.github/workflows/docker-publish.yml`](../../.github/workflows/docker-publish.yml)
 によってマルチアーキテクチャ(amd64 + arm64 —— Apple Silicon と Raspberry Pi を含む)で

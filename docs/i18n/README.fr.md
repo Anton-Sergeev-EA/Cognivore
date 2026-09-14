@@ -209,6 +209,15 @@ l'étape d'exécution n'embarque pas. Vous voulez malgré tout une inférence
 GGUF in-process dans le conteneur ? Ajoutez `build-essential` à l'étape
 finale et faites repointer son `pip install` vers l'extra `[all]`.
 
+`faster-whisper` télécharge son modèle de reconnaissance vocale depuis
+Hugging Face la première fois que la transcription audio est réellement
+utilisée (pas au moment du build), comme `ollama pull` pour la LLM --
+la différence est que celui-ci se fait automatiquement dès la première
+utilisation plutôt que via une commande explicite. Comme les modèles
+d'Ollama, il est mis en cache dans le volume persistant `cognivore-data`
+(`HF_HOME=/data/hf-cache`), donc il ne se télécharge qu'une seule fois,
+pas à chaque `docker compose up --build`.
+
 **Image préconstruite (aucune étape de build du tout) :** les versions
 taguées sont publiées en multi-architecture (amd64 + arm64 -- Apple
 Silicon et Raspberry Pi compris) sur GHCR par

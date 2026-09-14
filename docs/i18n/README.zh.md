@@ -181,6 +181,13 @@ LLM，而不是在进程内加载 GGUF 文件，因为 llama-cpp-python 并非�
 器内进行进程内 GGUF 推理？可以在最终阶段中添加 `build-essential`，并把
 其中的 `pip install` 换回 `[all]` extra。
 
+`faster-whisper` 会在音频转录功能被实际使用时（而不是在构建阶段）才从
+Hugging Face 下载其语音识别模型，这与用于 LLM 的 `ollama pull` 类似 ——
+不同之处在于这一步是在首次使用时自动完成的，而无需执行显式命令。与
+Ollama 的模型一样，该模型会被缓存在持久化的 `cognivore-data` 数据卷中
+（`HF_HOME=/data/hf-cache`），因此只会下载一次，而不是每次执行
+`docker compose up --build` 都重新下载一遍。
+
 **预构建镜像（完全无需构建步骤）：** 带标签的发布版本会以多架构形式
 （amd64 + arm64 —— 包括 Apple Silicon 和 Raspberry Pi）发布到 GHCR，
 构建流程见

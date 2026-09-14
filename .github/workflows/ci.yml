@@ -67,6 +67,16 @@ jobs:
           sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng
           pip install -e ".[video]"
         continue-on-error: true
+      # Same idea for audio: test_audio.py's speech-recognition test needs
+      # `faster-whisper` (downloads a small Whisper model from Hugging Face
+      # on first use) and `espeak-ng` to synthesize the test speech; both
+      # self-skip when unavailable, so this is best-effort too.
+      - name: Install audio extra + espeak-ng (ubuntu/3.11 only, for real transcription coverage)
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends espeak-ng
+          pip install -e ".[audio]"
+        continue-on-error: true
       - run: pytest --cov --cov-report=term-missing
 
   build-native-matrix:

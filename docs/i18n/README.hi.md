@@ -199,6 +199,15 @@ OCR के लिए Tesseract) के साथ आती है
 `build-essential` जोड़ें और उसके `pip install` को वापस `[all]` extra
 पर स्विच करें।
 
+`faster-whisper` अपना स्पीच-रिकग्निशन मॉडल Hugging Face से पहली बार
+डाउनलोड करता है जब ऑडियो ट्रांसक्रिप्शन असल में इस्तेमाल होता है (build
+टाइम पर नहीं) -- ठीक वैसे ही जैसे LLM के लिए `ollama pull` होता है,
+फ़र्क़ बस यह है कि यह पहले इस्तेमाल पर ऑटोमैटिकली हो जाता है, कोई explicit
+कमांड नहीं चाहिए। Ollama के मॉडल्स की तरह ही, यह भी persisted
+`cognivore-data` volume में cache होता है (`HF_HOME=/data/hf-cache`),
+इसलिए यह सिर्फ़ एक बार डाउनलोड होता है, हर `docker compose up --build`
+पर नहीं।
+
 **Prebuilt इमेज (बिल्कुल कोई बिल्ड स्टेप नहीं):** tagged रिलीज़
 [`.github/workflows/docker-publish.yml`](../../.github/workflows/docker-publish.yml)
 के ज़रिए multi-arch (amd64 + arm64 -- Apple Silicon और Raspberry Pi

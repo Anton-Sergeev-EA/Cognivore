@@ -58,9 +58,16 @@ RUN WHEEL="$(ls /tmp/*.whl)" \
     && pip install --no-cache-dir "${WHEEL}[audio,video]" \
     && rm -f /tmp/*.whl
 
+# HF_HOME redirects faster-whisper's Hugging Face model cache into the
+# already-persisted /data volume (same reasoning as `ollama-data` in
+# docker-compose.yml for the LLM: without this, the cache would live under
+# the container's throwaway home directory, and the ~75MB-1GB Whisper
+# model would be re-downloaded from Hugging Face on every rebuild/recreate
+# instead of once.
 ENV COGNIVORE_HOST=0.0.0.0 \
     COGNIVORE_PORT=8420 \
-    COGNIVORE_DATA_DIR=/data
+    COGNIVORE_DATA_DIR=/data \
+    HF_HOME=/data/hf-cache
 
 # Run as an unprivileged user rather than root -- this is a network-facing
 # service (even if usually only reachable on localhost/a private compose
