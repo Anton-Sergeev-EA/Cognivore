@@ -1,0 +1,32 @@
+# Runs the same checks CI does, before they ever reach a push --
+# `pip install -e ".[dev]"` already pulls in pre-commit; `pre-commit install`
+# wires it into `git commit`. mypy and pytest are deliberately not hooks
+# here: mypy needs the project's own installed deps on its path (a hook's
+# isolated env doesn't have them without extra config that drifts from
+# pyproject.toml), and pytest is too slow to run on every commit -- both
+# are still enforced, just in CI and in `CONTRIBUTING.md`'s pre-PR
+# checklist instead of here.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Pinned to the same ruff release pyproject.toml's `dev` extra installs
+    # (see pyproject.toml's `ruff>=0.6` -- keep this in sync with whatever
+    # `pip install -e ".[dev]"` actually resolves, via `ruff --version`).
+    # A mismatched pin is exactly how a hook can flag something the
+    # project's own `ruff check .` doesn't (rules get added, renamed, or
+    # dropped between releases).
+    rev: v0.16.7
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=1024]

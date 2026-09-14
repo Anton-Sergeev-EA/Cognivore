@@ -1,0 +1,26 @@
+version: 2
+updates:
+  # Python dependencies (pyproject.toml).
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      # One combined PR for routine bumps instead of a dozen separate
+      # ones -- a security-relevant update still opens on its own,
+      # unbatched, so it's never held up waiting for the next weekly PR.
+      python-dependencies:
+        patterns:
+          - "*"
+
+  # The Dockerfile's own base image (python:3.11-slim).
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # GitHub Actions used in .github/workflows/*.yml.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

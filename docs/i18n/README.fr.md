@@ -6,6 +6,7 @@ web -- tout fonctionne sur un simple ordinateur portable équipé d'un CPU,
 rien n'a besoin de quitter votre machine.
 
 [![CI](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/ci.yml/badge.svg)](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/codeql.yml/badge.svg)](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/codeql.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](../../pyproject.toml)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-black)](https://github.com/astral-sh/ruff)
@@ -31,6 +32,12 @@ you> What does the ingested spec say about the retry policy, and what's 15% of t
 cognivore> The spec (spec.md) sets a 5000ms timeout with exponential
 backoff. 15% of that is 750ms.
 ```
+
+La même boucle, dans l'interface web -- une trace en direct de l'appel d'outil et du passage retrouvé, dans n'importe laquelle des 9 langues et des 3 thèmes :
+
+| Thème aurora, anglais -- trace RAG | Thème sombre, russe -- calculatrice |
+|---|---|
+| ![Interface web Cognivore : thème aurora, anglais, un appel d'outil search_knowledge_base et le passage retrouvé](../screenshots/web-ui-en.png) | ![Interface web Cognivore : thème sombre, russe, un appel d'outil calculator](../screenshots/web-ui-ru.png) |
 
 ## Pourquoi ce projet existe
 

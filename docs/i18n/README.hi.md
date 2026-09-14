@@ -6,6 +6,7 @@ RAG, हाथ से लिखे गए C++ वेक्टर इंडेक
 नहीं है।
 
 [![CI](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/ci.yml/badge.svg)](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/codeql.yml/badge.svg)](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/codeql.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](../../pyproject.toml)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-black)](https://github.com/astral-sh/ruff)
@@ -31,6 +32,12 @@ you> What does the ingested spec say about the retry policy, and what's 15% of t
 cognivore> The spec (spec.md) sets a 5000ms timeout with exponential
 backoff. 15% of that is 750ms.
 ```
+
+वही लूप, वेब UI में — टूल कॉल और उसके द्वारा प्राप्त पैसेज का लाइव ट्रेस, सभी 9 भाषाओं और 3 थीम में से किसी में भी:
+
+| Aurora थीम, अंग्रेज़ी — RAG ट्रेस | डार्क थीम, रूसी — कैलकुलेटर |
+|---|---|
+| ![Cognivore वेब UI: Aurora थीम, अंग्रेज़ी, एक search_knowledge_base टूल कॉल और प्राप्त पैसेज](../screenshots/web-ui-en.png) | ![Cognivore वेब UI: डार्क थीम, रूसी, एक calculator टूल कॉल](../screenshots/web-ui-ru.png) |
 
 ## यह प्रोजेक्ट क्यों बनाया गया
 

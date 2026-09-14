@@ -5,6 +5,7 @@ C++ 向量索引与网页聊天界面 —— 一切均可在纯 CPU 笔记本电
 内容离开你的设备。
 
 [![CI](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/ci.yml/badge.svg)](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/codeql.yml/badge.svg)](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/codeql.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](../../pyproject.toml)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-black)](https://github.com/astral-sh/ruff)
@@ -27,6 +28,12 @@ you> What does the ingested spec say about the retry policy, and what's 15% of t
 cognivore> The spec (spec.md) sets a 5000ms timeout with exponential
 backoff. 15% of that is 750ms.
 ```
+
+同样的流程，在网页界面中呈现——工具调用及其检索到的片段的实时轨迹，可在全部 9 种语言和 3 种主题中任选：
+
+| Aurora 主题，英文——RAG 轨迹 | 深色主题，俄文——计算器 |
+|---|---|
+| ![Cognivore 网页界面：Aurora 主题、英文，一次 search_knowledge_base 工具调用及其检索到的片段](../screenshots/web-ui-en.png) | ![Cognivore 网页界面：深色主题、俄文，一次 calculator 工具调用](../screenshots/web-ui-ru.png) |
 
 ## 项目缘由
 

@@ -5,6 +5,7 @@ LLM による推論 + RAG を、自作の C++ ベクトルインデックスと 
 提供 —— すべてが CPU のみのノート PC 上で動作し、外部への通信は一切不要です。
 
 [![CI](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/ci.yml/badge.svg)](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/codeql.yml/badge.svg)](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/codeql.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](../../pyproject.toml)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-black)](https://github.com/astral-sh/ruff)
@@ -28,6 +29,12 @@ you> What does the ingested spec say about the retry policy, and what's 15% of t
 cognivore> The spec (spec.md) sets a 5000ms timeout with exponential
 backoff. 15% of that is 750ms.
 ```
+
+同じループを Web UI 上で —— ツール呼び出しと取得された一節のライブトレースを、9 言語・3 テーマのいずれでも:
+
+| Aurora テーマ、英語 —— RAG トレース | ダークテーマ、ロシア語 —— 計算機 |
+|---|---|
+| ![Cognivore の Web UI: Aurora テーマ、英語、search_knowledge_base ツール呼び出しと取得された一節](../screenshots/web-ui-en.png) | ![Cognivore の Web UI: ダークテーマ、ロシア語、calculator ツール呼び出し](../screenshots/web-ui-ru.png) |
 
 ## このプロジェクトが存在する理由
 
