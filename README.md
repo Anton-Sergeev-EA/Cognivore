@@ -9,6 +9,8 @@ runs on a CPU-only laptop, nothing is required to leave your machine.
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-black)](https://github.com/astral-sh/ruff)
 
+🌐 **Read this in another language:** [English](README.md) | [Русский](docs/i18n/README.ru.md) | [Deutsch](docs/i18n/README.de.md) | [Français](docs/i18n/README.fr.md) | [Italiano](docs/i18n/README.it.md) | [Español](docs/i18n/README.es.md) | [中文](docs/i18n/README.zh.md) | [日本語](docs/i18n/README.ja.md) | [हिन्दी](docs/i18n/README.hi.md)
+
 Cognivore is a ReAct-style agent framework with retrieval-augmented
 generation and multimodal tool support (audio transcription, video scene
 analysis), built specifically to run entirely on a CPU-only machine with no
@@ -95,8 +97,19 @@ echo 'COGNIVORE_LLM_MODEL_PATH=/path/to/model.gguf' >> .env
 cognivore chat
 ```
 
+Or, simpler and with no C++ toolchain involved at all, point it at
+[Ollama](https://ollama.com) instead -- `COGNIVORE_LLM_PROVIDER=auto` (the
+default) tries a locally running Ollama server before falling back to a
+GGUF path or `FakeLLMBackend`:
+
+```bash
+ollama pull qwen2.5:3b   # any instruction-tuned model works
+cognivore chat           # picks up the running Ollama server automatically
+```
+
 Audio/video tools need their own extras: `pip install -e ".[audio,video]"`
-(or `.[all]` for everything). See `.env.example` for every setting.
+(or `.[all]` for everything, GGUF included). See `.env.example` for every
+setting.
 
 ### Docker
 
@@ -152,6 +165,50 @@ GHCR by [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publis
 
 ```bash
 docker pull ghcr.io/anton-sergeev-ea/cognivore:latest
+```
+
+## Usage
+
+**CLI** (`cognivore --help` for the full list):
+
+```bash
+cognivore chat                              # interactive REPL
+cognivore ingest ./docs                     # recursively indexes .txt/.md/.markdown/.rst
+cognivore serve --host 0.0.0.0 --port 8420  # web UI + REST/SSE API
+cognivore bench                             # index build/search benchmarks (see below)
+```
+
+**Web UI** (`cognivore serve`, then open the printed URL): a chat interface
+with live token streaming, a drag-and-drop zone for `.txt`/`.md` ingestion
+and for audio/video files, a language switcher (9 languages), three themes
+(dark/light/aurora), and a trace view of every tool call the agent made
+for a given answer (click a step to see the full, untruncated tool
+output).
+
+**REST/SSE API**, once `cognivore serve` is running:
+
+```bash
+curl http://127.0.0.1:8420/api/health
+
+curl -X POST http://127.0.0.1:8420/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "What is 12 * 7?"}'
+
+curl -N "http://127.0.0.1:8420/api/chat/stream?message=Summarize+the+ingested+docs"
+
+curl -X POST http://127.0.0.1:8420/api/ingest/file -F "file=@./notes.md"
+```
+
+**As a library**, rather than through the CLI or the API (see
+`examples/`):
+
+```python
+from cognivore.bootstrap import build_agent
+from cognivore.config import get_settings
+
+agent = build_agent(get_settings())
+result = agent.run("What's 15% of 5000?")
+print(result.answer)
 ```
 
 ## Benchmarks
@@ -210,7 +267,7 @@ and this README isn't going to pretend it is.
 
 ```bash
 pip install -e ".[dev]"
-pytest --cov                 # 49 tests: calculator safety, chunking,
+pytest --cov                 # 71 tests: calculator safety, chunking,
                               # native-vs-Python index parity, NSW recall,
                               # agent loop, RAG store, FastAPI endpoints
 ruff check . && ruff format --check .
@@ -242,14 +299,14 @@ src/cognivore/
   cli.py            cognivore chat|ingest|serve|bench
 benchmarks/         standalone scripts for the numbers above
 examples/           minimal library-usage scripts
-tests/              pytest suite (49 tests)
+tests/              pytest suite (71 tests)
 ```
 
 ## License
 
 MIT -- see [LICENSE](LICENSE).
 
----
+## Contact
 
-Built by [Anton Sergeev](https://github.com/Anton-Sergeev-EA).
+Built by **Sergeev Anton** ([GitHub](https://github.com/Anton-Sergeev-EA), [avsergeev1981@gmail.com](mailto:avsergeev1981@gmail.com)).
 Contributions welcome -- see [CONTRIBUTING.md](CONTRIBUTING.md).
