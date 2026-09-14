@@ -241,6 +241,7 @@ def build_tool_registry(
                 VideoAnalyzeTool(
                     scene_threshold=settings.video_scene_threshold,
                     max_keyframes=settings.video_max_keyframes,
+                    ocr_languages=settings.ocr_languages,
                 )
             )
         else:

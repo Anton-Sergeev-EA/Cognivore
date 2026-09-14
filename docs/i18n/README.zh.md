@@ -109,19 +109,28 @@ cognivore chat           # 会自动识别正在运行的 Ollama 服务器
 音频/视频工具需要单独的 extras：`pip install -e ".[audio,video]"`（或
 使用 `.[all]` 安装全部内容，包括 GGUF）。所有配置项详见 `.env.example`。
 
-视频工具中的屏幕文字提取功能（`analyze_video`）还需要
+视频工具中的屏幕文字提取功能（`analyze_video`）同样需要
 [Tesseract](https://github.com/tesseract-ocr/tesseract) OCR *二进制程
-序* 本身——`video` extra 拉取的 `pytesseract` 包只是它的一层薄封装，
-缺少这个二进制程序时 OCR 会静默地返回空文本（场景检测和时间戳不受影
-响，仍能照常工作，因为那部分完全由 OpenCV 完成）：
+序* 本身——`video` extra 拉取的 `pytesseract` 包只是它的一层薄封装，缺
+少这个二进制程序时 OCR 会静默地返回空文本（场景检测和时间戳不受影响，
+仍能照常工作，因为那部分完全由 OpenCV 完成）。它默认识别英语*和*俄语（
+`eng+rus`，参见 `.env.example` 中的 `COGNIVORE_OCR_LANGUAGES`）——在
+Debian/Ubuntu 上，普通的 `tesseract-ocr` 包会自动带上 `eng`，但不会带
+上 `rus`，因此需要显式安装两者：
 
 ```bash
-sudo apt install tesseract-ocr        # Debian/Ubuntu
-brew install tesseract                # macOS
-# Windows: https://github.com/UB-Mannheim/tesseract/wiki
+sudo apt install tesseract-ocr tesseract-ocr-rus   # Debian/Ubuntu
+brew install tesseract                              # macOS —— 自带所有语言
+# Windows: https://github.com/UB-Mannheim/tesseract/wiki (在安装向导的语言列表中勾选俄语)
 ```
 
-Docker 镜像已经内置了它，无需额外安装。
+Docker 镜像已经内置了两者，无需额外安装。
+
+请求一种尚未安装训练数据包的语言并不会报错——它会静默地把该文字识别成形
+近的拉丁字母（西里尔文“Контейнеры”会被识别成“KoHTewHepbi”），看起来像
+是扫描质量差，而非缺少语言包。如果你的屏幕文字使用其他语言，请安装对应
+的 `tesseract-ocr-<lang>` 包，并将其加入 `COGNIVORE_OCR_LANGUAGES`（例
+如 `eng+rus+deu`）。
 
 ### Docker
 

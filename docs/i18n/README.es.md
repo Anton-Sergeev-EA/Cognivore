@@ -132,15 +132,26 @@ La extracción de texto en pantalla de la herramienta de vídeo
 `pytesseract` que trae el extra `video` no es más que un envoltorio fino
 alrededor de él, y sin él el OCR no devuelve texto silenciosamente (la
 detección de escenas y las marcas de tiempo funcionan igual, ya que esa
-parte es puro OpenCV):
+parte es puro OpenCV). Por defecto reconoce inglés *y* ruso (`eng+rus`,
+ver `COGNIVORE_OCR_LANGUAGES` en `.env.example`) -- en Debian/Ubuntu el
+paquete `tesseract-ocr` normal trae `eng` automáticamente pero no `rus`,
+así que instala ambos explícitamente:
 
 ```bash
-sudo apt install tesseract-ocr        # Debian/Ubuntu
-brew install tesseract                # macOS
-# Windows: https://github.com/UB-Mannheim/tesseract/wiki
+sudo apt install tesseract-ocr tesseract-ocr-rus   # Debian/Ubuntu
+brew install tesseract                              # macOS -- trae todos los idiomas juntos
+# Windows: https://github.com/UB-Mannheim/tesseract/wiki (marca ruso en la lista de idiomas del instalador)
 ```
 
-La imagen de Docker ya lo incluye -- no hay nada que instalar ahí.
+La imagen de Docker ya incluye ambos -- no hay nada que instalar ahí.
+
+Pedir un idioma cuyo paquete de datos entrenados no está instalado no da
+error -- simplemente reconoce mal esa escritura como letras latinas
+parecidas (el cirílico "Контейнеры" sale como "KoHTewHepbi"), lo que
+parece un escaneo defectuoso en vez de un paquete de idioma que falta. Si
+tu texto en pantalla usa otro idioma, instala su paquete
+`tesseract-ocr-<lang>` y añádelo a `COGNIVORE_OCR_LANGUAGES` (por ejemplo,
+`eng+rus+deu`).
 
 ### Docker
 

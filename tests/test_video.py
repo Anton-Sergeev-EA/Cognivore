@@ -33,6 +33,35 @@ pytestmark_ocr = pytest.mark.skipif(
     reason="tesseract binary not installed (apt install tesseract-ocr / brew install tesseract)",
 )
 
+if not tesseract_missing:
+    import subprocess
+
+    _tesseract_langs = subprocess.run(
+        ["tesseract", "--list-langs"], capture_output=True, text=True, check=False
+    ).stdout
+    rus_missing = "rus" not in _tesseract_langs.splitlines()
+else:
+    rus_missing = True
+
+pytestmark_ocr_rus = pytest.mark.skipif(
+    rus_missing,
+    reason="tesseract-ocr-rus trained data not installed",
+)
+
+
+def _draw_text_frame(text: str, size: tuple[int, int] = (400, 100)) -> object:
+    """Renders `text` onto a white background with a Unicode-capable font
+    (cv2.putText only supports ASCII, which can't render Cyrillic), returning
+    a BGR array shaped like a real cv2 video frame."""
+    import numpy as np
+    from PIL import Image, ImageDraw, ImageFont
+
+    img = Image.new("RGB", size, color=(255, 255, 255))
+    draw = ImageDraw.Draw(img)
+    font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 28)
+    draw.text((10, 30), text, fill=(0, 0, 0), font=font)
+    return np.array(img)[:, :, ::-1]  # RGB -> BGR, matching cv2's frame layout
+
 
 def _make_two_scene_video(path: Path) -> None:
     """A tiny synthetic .mp4: 1s of plain gray, then 1s of a dark frame with
@@ -96,6 +125,30 @@ def test_ocr_frame_reads_text_off_a_synthetic_frame() -> None:
     cv2.putText(frame, "HELLO WORLD", (20, 60), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 0), 3)
 
     assert "HELLO" in _ocr_frame(frame).upper()
+
+
+@pytestmark_ocr
+@pytestmark_ocr_rus
+def test_ocr_frame_reads_cyrillic_text_with_the_default_language_pack() -> None:
+    """Regression test for the exact bug reported live: on-screen Cyrillic
+    text (e.g. a Russian terminal/UI in a screen recording) came out as
+    garbled look-alike Latin letters because `_ocr_frame` was hardcoded to
+    English-only OCR. The default is now `eng+rus` (see `Settings.ocr_languages`
+    and the Dockerfile), so real Cyrillic text should come back correctly."""
+    frame = _draw_text_frame("Контейнеры запущены")
+
+    assert "Контейнеры" in _ocr_frame(frame)
+
+
+@pytestmark_ocr
+def test_ocr_frame_mangles_cyrillic_when_forced_to_english_only() -> None:
+    """The other half of the regression test above: explicitly requesting
+    `lang="eng"` on Cyrillic text should *not* recognize it correctly -- this
+    is what locks in that the fix is the `eng+rus` default actually taking
+    effect, not a coincidence of a better OCR engine."""
+    frame = _draw_text_frame("Контейнеры запущены")
+
+    assert "Контейнеры" not in _ocr_frame(frame, lang="eng")
 
 
 @pytestmark_ocr

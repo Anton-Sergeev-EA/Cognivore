@@ -64,7 +64,7 @@ jobs:
       - name: Install video extra + Tesseract (ubuntu/3.11 only, for real OCR coverage)
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
         run: |
-          sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng tesseract-ocr-rus
           pip install -e ".[video]"
         continue-on-error: true
       # Same idea for audio: test_audio.py's speech-recognition test needs
