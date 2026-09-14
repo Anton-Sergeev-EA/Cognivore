@@ -6,6 +6,7 @@ chat web -- todo funciona en un portátil solo con CPU, nada tiene que salir
 de tu máquina.
 
 [![CI](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/ci.yml/badge.svg)](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/codeql.yml/badge.svg)](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/codeql.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](../../pyproject.toml)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-black)](https://github.com/astral-sh/ruff)
@@ -31,6 +32,12 @@ you> What does the ingested spec say about the retry policy, and what's 15% of t
 cognivore> The spec (spec.md) sets a 5000ms timeout with exponential
 backoff. 15% of that is 750ms.
 ```
+
+El mismo ciclo, en la interfaz web -- una traza en vivo de la llamada a la herramienta y el fragmento recuperado, en cualquiera de los 9 idiomas y los 3 temas:
+
+| Tema aurora, inglés -- traza de RAG | Tema oscuro, ruso -- calculadora |
+|---|---|
+| ![Interfaz web de Cognivore: tema aurora, inglés, una llamada a la herramienta search_knowledge_base y el fragmento recuperado](../screenshots/web-ui-en.png) | ![Interfaz web de Cognivore: tema oscuro, ruso, una llamada a la herramienta calculator](../screenshots/web-ui-ru.png) |
 
 ## Por qué existe este proyecto
 
@@ -104,7 +111,7 @@ cognivore chat
 ```
 
 O, más sencillo aún y sin necesidad de ninguna cadena de compilación de
-C++, apúntalo en su lugar a [Ollama](https://ollama.com) -- 
+C++, apúntalo en su lugar a [Ollama](https://ollama.com) --
 `COGNIVORE_LLM_PROVIDER=auto` (el valor por defecto) primero intenta un
 servidor Ollama en ejecución local antes de recurrir a una ruta GGUF o a
 `FakeLLMBackend`:

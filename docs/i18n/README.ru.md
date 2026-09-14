@@ -6,6 +6,7 @@
 машины.
 
 [![CI](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/ci.yml/badge.svg)](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/codeql.yml/badge.svg)](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/codeql.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](../../pyproject.toml)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-black)](https://github.com/astral-sh/ruff)
@@ -30,6 +31,12 @@ you> What does the ingested spec say about the retry policy, and what's 15% of t
 cognivore> The spec (spec.md) sets a 5000ms timeout with exponential
 backoff. 15% of that is 750ms.
 ```
+
+Тот же цикл — в веб-интерфейсе: трассировка вызова инструмента и найденного фрагмента, на любом из 9 языков и в любой из 3 тем:
+
+| Тема aurora, английский — трассировка RAG | Тёмная тема, русский — вызов калькулятора |
+|---|---|
+| ![Веб-интерфейс Cognivore: тема aurora, английский, вызов инструмента search_knowledge_base и найденный фрагмент](../screenshots/web-ui-en.png) | ![Веб-интерфейс Cognivore: тёмная тема, русский, вызов инструмента calculator](../screenshots/web-ui-ru.png) |
 
 ## Зачем этот проект существует
 

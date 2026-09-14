@@ -6,6 +6,7 @@ un'interfaccia web di chat -- tutto funziona su un normale laptop con sola
 CPU, senza che nulla debba uscire dalla vostra macchina.
 
 [![CI](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/ci.yml/badge.svg)](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/codeql.yml/badge.svg)](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/codeql.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](../../pyproject.toml)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-black)](https://github.com/astral-sh/ruff)
@@ -31,6 +32,12 @@ you> What does the ingested spec say about the retry policy, and what's 15% of t
 cognivore> The spec (spec.md) sets a 5000ms timeout with exponential
 backoff. 15% of that is 750ms.
 ```
+
+Lo stesso ciclo, nella web UI -- una traccia dal vivo della chiamata allo strumento e del passaggio recuperato, in qualsiasi delle 9 lingue e dei 3 temi:
+
+| Tema aurora, inglese -- traccia RAG | Tema scuro, russo -- calcolatrice |
+|---|---|
+| ![Web UI di Cognivore: tema aurora, inglese, una chiamata allo strumento search_knowledge_base e il passaggio recuperato](../screenshots/web-ui-en.png) | ![Web UI di Cognivore: tema scuro, russo, una chiamata allo strumento calculator](../screenshots/web-ui-ru.png) |
 
 ## Perché questo progetto esiste
 

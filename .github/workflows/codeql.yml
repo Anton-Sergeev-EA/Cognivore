@@ -1,0 +1,36 @@
+name: CodeQL
+
+# Static security analysis of the Python source (native/*.cpp is C++ and
+# not covered here -- CodeQL's C++ analysis needs the code to actually
+# build, which means wiring up the same compiler toolchain as the
+# Dockerfile's builder stage; left for later rather than done half-right).
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  schedule:
+    # Weekly, so a newly-published CodeQL query catches something in
+    # code that hasn't changed, not just code touched by a push/PR.
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyze (python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:python"

@@ -17,6 +17,14 @@ Building the native extension requires a C++17 compiler (GCC/Clang/MSVC).
 If none is available, installation still succeeds and the pure-Python
 fallback index is used automatically -- see `src/cognivore/index/__init__.py`.
 
+Then wire up the pre-commit hooks (`.pre-commit-config.yaml` -- ruff lint
++ format, plus a few hygiene checks) so lint/format issues are caught at
+commit time instead of in CI:
+
+```bash
+pre-commit install
+```
+
 ## Before opening a PR
 
 ```bash
