@@ -57,6 +57,16 @@ jobs:
       - name: Install (pure-Python fallback, if the native build failed)
         run: pip install -e ".[dev]" --no-build-isolation || pip install -e ".[dev]"
         if: failure()
+      # Only on one leg of the matrix, and only best-effort: the video/OCR
+      # tests in test_video.py self-skip via importorskip/shutil.which when
+      # this isn't present, so a failure here (e.g. a transient apt mirror
+      # issue) degrades to "skipped," not a broken build.
+      - name: Install video extra + Tesseract (ubuntu/3.11 only, for real OCR coverage)
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng
+          pip install -e ".[video]"
+        continue-on-error: true
       - run: pytest --cov --cov-report=term-missing
 
   build-native-matrix:

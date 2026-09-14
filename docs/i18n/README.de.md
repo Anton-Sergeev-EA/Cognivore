@@ -67,8 +67,9 @@ und nicht nur importiert sind.
   ohne jeglichen Download, hybrides Retrieval aus Vektor- und BM25-Suche.
 - **Multimodale Werkzeuge**: ein sicherer (AST-basierter, ohne `eval`)
   Rechner, Wissensdatenbank-Suche, Audio-Transkription mit grober
-  Sprecherzuordnung (`faster-whisper`) und Video-Szenenerkennung + OCR
-  (OpenCV) -- alles rein CPU-basiert, ohne PyTorch.
+  Sprecherzuordnung (`faster-whisper`) und Video-Szenenerkennung (OpenCV)
+  + Texterkennung im Bild per OCR (Tesseract) -- alles rein CPU-basiert,
+  ohne PyTorch.
 - **Austauschbares LLM-Backend**: lokale GGUF-Inferenz über
   `llama-cpp-python`, oder ein deterministisches, abhängigkeitsfreies
   `FakeLLMBackend`, das exakt denselben Tool-Calling-Codepfad durchläuft,
@@ -125,6 +126,21 @@ Audio-/Video-Werkzeuge benötigen ihre eigenen Extras:
 `pip install -e ".[audio,video]"` (oder `.[all]` für alles zusammen,
 inklusive GGUF). Alle Einstellungen finden Sie in `.env.example`.
 
+Die Texterkennung im Video-Werkzeug (`analyze_video`) benötigt zusätzlich
+die [Tesseract](https://github.com/tesseract-ocr/tesseract)-OCR-*Binary*
+selbst -- das über das `video`-Extra installierte `pytesseract`-Paket ist
+nur ein dünner Wrapper darum und liefert ohne die Binary stillschweigend
+keinen Text (Szenenerkennung und Zeitstempel funktionieren trotzdem, da
+dieser Teil rein auf OpenCV beruht):
+
+```bash
+sudo apt install tesseract-ocr        # Debian/Ubuntu
+brew install tesseract                # macOS
+# Windows: https://github.com/UB-Mannheim/tesseract/wiki
+```
+
+Das Docker-Image bringt sie bereits mit -- dort ist nichts zu installieren.
+
 ### Docker
 
 Das Image wird in mehreren Stufen gebaut (kompiliert die native
@@ -179,8 +195,8 @@ bereitgestellt; das explizite `--add-host` oben ist das, was denselben
 Befehl auch auf einem gewöhnlichen Linux-System funktionsfähig macht, wo der
 Name sonst nicht aufgelöst würde.
 
-Das Image liefert die Audio-/Video-Werkzeuge (`faster-whisper`, OpenCV) mit,
-aber *nicht* `llama-cpp-python` -- es spricht stattdessen bewusst über
+Das Image liefert die Audio-/Video-Werkzeuge (`faster-whisper`, OpenCV, und
+Tesseract für die Texterkennung im Bild) mit, aber *nicht* `llama-cpp-python` -- es spricht stattdessen bewusst über
 gewöhnliches HTTP mit Ollama, statt eine GGUF-Datei im selben Prozess zu
 laden, da llama-cpp-python nicht für jede Plattform ein vorgefertigtes Wheel
 hat und einen Compiler benötigt, den die Runtime-Stufe nicht mitbringt.

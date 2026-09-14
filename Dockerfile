@@ -21,6 +21,18 @@ LABEL org.opencontainers.image.title="cognivore" \
       org.opencontainers.image.licenses="MIT"
 
 WORKDIR /app
+
+# tesseract-ocr is the native OCR *binary* that pytesseract (installed below
+# via the `video` extra) shells out to -- the Python package alone can't do
+# OCR without it. Without this, on-screen text extraction in `analyze_video`
+# silently returns "" (the scene-detection/timestamps part still works, since
+# that's pure OpenCV). eng is the only trained-language pack pulled in, to
+# keep the image small; add more `tesseract-ocr-<lang>` packages here if
+# on-screen text in other languages needs to be recognized.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /build/dist/*.whl /tmp/
 # Deliberately `[audio,video]`, not `[all]`. `[all]` also pulls in `llm`
 # (llama-cpp-python), which -- confirmed live, not hypothetical -- has no

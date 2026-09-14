@@ -66,7 +66,8 @@ provider-agnostic टूल-कॉलिंग प्रोटोकॉल, ए�
   साथ, वेक्टर + BM25 हाइब्रिड रिट्रीवल।
 - **मल्टीमॉडल टूल्स**: सुरक्षित (AST-आधारित, बिना `eval`) कैलकुलेटर,
   नॉलेज-बेस सर्च, ऑडियो ट्रांसक्रिप्शन + मोटे तौर पर speaker turns
-  (`faster-whisper`), और वीडियो scene-detection + OCR (OpenCV) -- सब कुछ
+  (`faster-whisper`), और वीडियो scene-detection (OpenCV) + ऑन-स्क्रीन टेक्स्ट OCR
+  (Tesseract) -- सब कुछ
   CPU-only, बिना PyTorch।
 - **प्लगेबल LLM बैकएंड**: `llama-cpp-python` के ज़रिए लोकल GGUF इनफेरेंस,
   या एक deterministic, dependency-free `FakeLLMBackend` जो बिना कुछ भी
@@ -122,6 +123,22 @@ cognivore chat           # picks up the running Ollama server automatically
 `pip install -e ".[audio,video]"` (या सब कुछ के लिए `.[all]`, GGUF
 शामिल)। हर सेटिंग के लिए `.env.example` देखें।
 
+वीडियो टूल (`analyze_video`) में ऑन-स्क्रीन टेक्स्ट एक्सट्रैक्शन के लिए
+[Tesseract](https://github.com/tesseract-ocr/tesseract) OCR *बाइनरी* भी
+चाहिए होती है -- `video` extra के साथ आने वाला `pytesseract` पैकेज तो बस
+इसके ऊपर एक पतला wrapper है, और इसके बिना OCR बिना किसी चेतावनी के कोई
+टेक्स्ट नहीं लौटाता (scene detection और timestamps दोनों तरीकों से चलते
+रहते हैं, क्योंकि वह हिस्सा शुद्ध रूप से OpenCV पर आधारित है):
+
+```bash
+sudo apt install tesseract-ocr        # Debian/Ubuntu
+brew install tesseract                # macOS
+# Windows: https://github.com/UB-Mannheim/tesseract/wiki
+```
+
+Docker इमेज में यह पहले से ही शामिल है -- वहाँ कुछ भी इंस्टॉल करने की
+ज़रूरत नहीं।
+
 ### Docker
 
 यह इमेज एक multi-stage build है (नेटिव C++ एक्सटेंशन को कंपाइल करती है,
@@ -172,7 +189,8 @@ docker run -d -p 8420:8420 -v cognivore-data:/data \
 मिलता है; ऊपर दिया गया explicit `--add-host` वही है जो इसी कमांड को
 plain Linux पर भी काम करने देता है, जहाँ अन्यथा यह resolve नहीं होता।
 
-यह इमेज ऑडियो/वीडियो टूल्स (`faster-whisper`, OpenCV) के साथ आती है
+यह इमेज ऑडियो/वीडियो टूल्स (`faster-whisper`, OpenCV, और ऑन-स्क्रीन टेक्स्ट
+OCR के लिए Tesseract) के साथ आती है
 लेकिन `llama-cpp-python` के *बिना* -- यह LLM के लिए in-process GGUF
 फाइल लोड करने के बजाय plain HTTP पर Ollama से बात करती है, जानबूझकर,
 क्योंकि llama-cpp-python के पास हर प्लेटफ़ॉर्म के लिए prebuilt wheel
