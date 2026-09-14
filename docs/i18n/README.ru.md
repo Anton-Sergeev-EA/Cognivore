@@ -195,6 +195,13 @@ llama-cpp-python нет готового пакета под каждую пла
 Добавьте `build-essential` в финальную стадию и переключите её
 `pip install` обратно на extra `[all]`.
 
+`faster-whisper` скачивает свою модель распознавания речи с Hugging Face
+при первом реальном использовании транскрипции (не во время сборки) —
+похоже на `ollama pull` для LLM, только это происходит автоматически, без
+отдельной команды. Как и модели Ollama, она кешируется в персистентном
+volume `cognivore-data` (`HF_HOME=/data/hf-cache`), так что скачивается
+только один раз, а не при каждом `docker compose up --build`.
+
 **Готовый образ (без единого шага сборки):** релизы с тегами публикуются
 мультиархитектурно (amd64 + arm64 — включая Apple Silicon и Raspberry Pi)
 в GHCR через [`.github/workflows/docker-publish.yml`](../../.github/workflows/docker-publish.yml):

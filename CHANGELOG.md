@@ -73,6 +73,18 @@ project uses [Semantic Versioning](https://semver.org/).
   requirement for native (non-Docker) installs, and adding real,
   non-mocked test coverage (`tests/test_video.py`) that exercises OCR
   end-to-end against a synthetic video with burned-in text.
+- Docker image: the `faster-whisper` speech-recognition model has no
+  dedicated cache volume (unlike Ollama's `ollama-data`), so its
+  Hugging Face model cache landed in the container's throwaway home
+  directory -- re-downloaded on every `docker compose up --build`
+  instead of once. Fixed by setting `HF_HOME=/data/hf-cache`, so it now
+  shares the already-persisted `cognivore-data` volume. Also added
+  `tests/test_audio.py` (previously zero coverage for the audio module):
+  real, non-mocked tests for the speaker-turn heuristic, a locked-in
+  check that a missing `faster-whisper` fails loudly (it already did --
+  unlike the OCR case above), and an end-to-end transcription test
+  against synthesized speech that self-skips without network access to
+  Hugging Face or a local TTS engine.
 - `cognivore ingest` (and the CLI generally) built a brand-new, empty
   `DocumentStore` on every invocation instead of loading whatever was
   already persisted at `store_dir` -- confirmed by writing a regression

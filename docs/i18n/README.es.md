@@ -206,6 +206,14 @@ lleva. ¿Aun así quieres inferencia GGUF en proceso dentro del contenedor?
 Añade `build-essential` a la etapa final y cambia su `pip install` de
 vuelta al extra `[all]`.
 
+`faster-whisper` descarga su modelo de reconocimiento de voz desde Hugging
+Face la primera vez que la transcripción de audio se usa realmente (no en
+tiempo de build), igual que `ollama pull` para el LLM -- la diferencia es
+que esto ocurre automáticamente en el primer uso, sin necesidad de un
+comando explícito. Igual que los modelos de Ollama, se cachea en el volumen
+persistido `cognivore-data` (`HF_HOME=/data/hf-cache`), así que solo se
+descarga una vez, no en cada `docker compose up --build`.
+
 **Imagen preconstruida (sin ningún paso de build):** las releases
 etiquetadas se publican multi-arquitectura (amd64 + arm64 -- incluyendo
 Apple Silicon y Raspberry Pi) en GHCR mediante

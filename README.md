@@ -194,6 +194,14 @@ compiler the runtime stage doesn't carry. Want in-process GGUF inference
 inside the container anyway? Add `build-essential` to the final stage and
 switch its `pip install` back to the `[all]` extra.
 
+`faster-whisper` downloads its speech-recognition model from Hugging Face
+the first time audio transcription is actually used (not at build time),
+same as `ollama pull` for the LLM -- the difference is this one happens
+automatically on first use rather than needing an explicit command. Like
+Ollama's models, it's cached in the persisted `cognivore-data` volume
+(`HF_HOME=/data/hf-cache`), so it only downloads once, not on every
+`docker compose up --build`.
+
 **Prebuilt image (no build step at all):** tagged releases are published
 multi-arch (amd64 + arm64 -- Apple Silicon and Raspberry Pi included) to
 GHCR by [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml):
