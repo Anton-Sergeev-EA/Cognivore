@@ -145,6 +145,18 @@ like a bad scan rather than a missing language pack. If your on-screen
 text uses another language, install its `tesseract-ocr-<lang>` package
 and add it to `COGNIVORE_OCR_LANGUAGES` (e.g. `eng+rus+deu`).
 
+`analyze_video`'s OCR is aimed at the content its own tool description
+names -- screencasts, lecture recordings, slide-based videos -- where text
+is large and deliberately composed. It's a much rougher ride on a raw
+terminal/IDE screen recording: small monospace font, heavy video
+compression right at the scene cuts this tool keys off of, and box-drawing
+or symbol glyphs OCR models were never trained on. Upscaling or
+thresholding the frame before OCR doesn't reliably help once compression
+has already thrown away the fine detail -- confirmed by testing it, not
+assumed. If you specifically want on-screen terminal/code text to OCR
+well, record at a larger font size and/or higher resolution; that's the
+lever that actually works, not post-processing after the fact.
+
 ### Docker
 
 The image is a multi-stage build (compiles the native C++ extension, then
