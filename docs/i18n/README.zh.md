@@ -58,7 +58,8 @@ backoff. 15% of that is 750ms.
   BM25 混合检索。
 - **多模态工具**：安全的（基于 AST，不使用 `eval`）计算器、知识库搜索、
   音频转录 + 粗略的说话人轮次划分（`faster-whisper`），以及视频场景检
-  测 + OCR（OpenCV）—— 全部仅需 CPU，无需 PyTorch。
+  测（OpenCV）+ 屏幕文字 OCR 识别（Tesseract）—— 全部仅需 CPU，无需
+  PyTorch。
 - **可插拔的 LLM 后端**：通过 `llama-cpp-python` 进行本地 GGUF 推理，
   或使用确定性、零依赖的 `FakeLLMBackend`，它无需任何下载即可走完完全
   相同的工具调用代码路径 —— 测试套件和 CI 正是针对它运行的。
@@ -107,6 +108,38 @@ cognivore chat           # 会自动识别正在运行的 Ollama 服务器
 
 音频/视频工具需要单独的 extras：`pip install -e ".[audio,video]"`（或
 使用 `.[all]` 安装全部内容，包括 GGUF）。所有配置项详见 `.env.example`。
+
+视频工具中的屏幕文字提取功能（`analyze_video`）同样需要
+[Tesseract](https://github.com/tesseract-ocr/tesseract) OCR *二进制程
+序* 本身——`video` extra 拉取的 `pytesseract` 包只是它的一层薄封装，缺
+少这个二进制程序时 OCR 会静默地返回空文本（场景检测和时间戳不受影响，
+仍能照常工作，因为那部分完全由 OpenCV 完成）。它默认识别英语*和*俄语（
+`eng+rus`，参见 `.env.example` 中的 `COGNIVORE_OCR_LANGUAGES`）——在
+Debian/Ubuntu 上，普通的 `tesseract-ocr` 包会自动带上 `eng`，但不会带
+上 `rus`，因此需要显式安装两者：
+
+```bash
+sudo apt install tesseract-ocr tesseract-ocr-rus   # Debian/Ubuntu
+brew install tesseract                              # macOS —— 自带所有语言
+# Windows: https://github.com/UB-Mannheim/tesseract/wiki (在安装向导的语言列表中勾选俄语)
+```
+
+Docker 镜像已经内置了两者，无需额外安装。
+
+请求一种尚未安装训练数据包的语言并不会报错——它会静默地把该文字识别成形
+近的拉丁字母（西里尔文“Контейнеры”会被识别成“KoHTewHepbi”），看起来像
+是扫描质量差，而非缺少语言包。如果你的屏幕文字使用其他语言，请安装对应
+的 `tesseract-ocr-<lang>` 包，并将其加入 `COGNIVORE_OCR_LANGUAGES`（例
+如 `eng+rus+deu`）。
+
+`analyze_video` 的 OCR 针对的是它自身工具说明中列出的内容——录屏演示、讲
+座录像、幻灯片视频——这类场景下文字通常又大又经过精心排版。而在原始
+的终端/IDE 屏幕录像上，情况就糟糕得多：等宽字体很小，在本工具据以切分
+场景的画面切换处视频压缩格外严重，还有 OCR 模型从未训练过的框线绘制
+字符或符号字形。一旦压缩已经丢弃了细节，在 OCR 之前对画面做放大或阈
+值化处理也不能可靠地改善结果——这是经过实测确认的，而不是凭空假设。
+如果你确实想让屏幕上的终端/代码文字被准确识别，请用更大的字号和/或
+更高的分辨率录制；这才是真正管用的办法，而不是事后的后处理。
 
 ### Docker
 
@@ -158,12 +191,34 @@ docker run -d -p 8420:8420 -v cognivore-data:/data \
 供；上面那条显式的 `--add-host` 正是让同一条命令在普通 Linux 上也能生
 效的原因，否则这个名字在那里无法解析。
 
-该镜像内置了音频/视频工具（`faster-whisper`、OpenCV），但*不*包含
+该镜像内置了音频/视频工具（`faster-whisper`、OpenCV，以及用于屏幕文
+字 OCR 的 Tesseract），但*不*包含
 `llama-cpp-python` —— 它是有意选择通过普通 HTTP 与 Ollama 通信来处理
 LLM，而不是在进程内加载 GGUF 文件，因为 llama-cpp-python 并非对每个平
 台都提供预构建的 wheel，而且需要运行时阶段并不具备的编译器。仍然想在容
 器内进行进程内 GGUF 推理？可以在最终阶段中添加 `build-essential`，并把
 其中的 `pip install` 换回 `[all]` extra。
+
+`faster-whisper` 会在音频转录功能被实际使用时（而不是在构建阶段）才从
+Hugging Face 下载其语音识别模型，这与用于 LLM 的 `ollama pull` 类似 ——
+不同之处在于这一步是在首次使用时自动完成的，而无需执行显式命令。与
+Ollama 的模型一样，该模型会被缓存在持久化的 `cognivore-data` 数据卷中
+（`HF_HOME=/data/hf-cache`），因此只会下载一次，而不是每次执行
+`docker compose up --build` 都重新下载一遍。
+
+**停止与重新启动**（例如重启主机之后）：
+
+```bash
+docker compose down   # 停止两个容器；数据会被保留（见下文）
+docker compose up -d  # 重新启动 —— 除非镜像本身发生变化，否则无需 --build
+```
+
+两个服务都设置为 `restart: unless-stopped`，因此如果你在关闭之前没有手
+动停止它们，一旦 Docker 守护进程重新启动（这在大多数安装方式下是默认行
+为），Docker 会自动把它们重新启动 —— 这种情况下完全不需要执行任何命令。
+知识库以及缓存的 Whisper/Ollama 模型保存在名为 `cognivore-data` 和
+`ollama-data` 的数据卷中，`docker compose down` 永远不会动这两个数据卷；
+只有显式执行 `docker compose down -v` 才会删除它们。
 
 **预构建镜像（完全无需构建步骤）：** 带标签的发布版本会以多架构形式
 （amd64 + arm64 —— 包括 Apple Silicon 和 Raspberry Pi）发布到 GHCR，
