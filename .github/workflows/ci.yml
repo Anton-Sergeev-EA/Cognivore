@@ -91,9 +91,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install pybind11 setuptools wheel
+      - run: pip install --upgrade "setuptools>=77" pybind11 wheel
       - run: python setup.py build_ext --inplace
       - name: Smoke-test the extension
+        working-directory: src
         run: python -c "from cognivore import _native; idx = _native.FlatIndex(4); idx.add(0, [1.0,0,0,0]); print(idx.search([1.0,0,0,0], 1))"
 
   docker:
