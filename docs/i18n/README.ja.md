@@ -62,7 +62,8 @@ backoff. 15% of that is 750ms.
   フォールバック付き)、ベクトル検索 + BM25 のハイブリッド検索。
 - **マルチモーダルツール**:安全な(AST ベースで `eval` を使わない)計算機、ナレッジ
   ベース検索、音声の書き起こしと簡易的な話者ターン分割(`faster-whisper`)、動画の
-  シーン検出 + OCR(OpenCV)—— すべて CPU のみで動作し、PyTorch は不要です。
+  シーン検出(OpenCV) + 画面内テキストのOCR認識(Tesseract)—— すべて CPU のみで
+  動作し、PyTorch は不要です。
 - **差し替え可能な LLM バックエンド**:`llama-cpp-python` によるローカル GGUF 推論、
   または決定論的で依存関係のない `FakeLLMBackend`(ダウンロード不要で、まったく同じ
   ツール呼び出しのコードパスを実行します)—— テストスイートと CI はこちらを対象に
@@ -115,6 +116,45 @@ cognivore chat           # 動作中の Ollama サーバーを自動的に検出
 音声/動画ツールにはそれぞれ独自の extras が必要です:`pip install -e ".[audio,video]"`
 (GGUF を含めすべてが必要な場合は `.[all]`)。設定項目の一覧は `.env.example` を参照して
 ください。
+
+動画ツール(`analyze_video`)での画面内テキスト抽出には、
+[Tesseract](https://github.com/tesseract-ocr/tesseract) OCR *バイナリ*本体も
+必要です —— `video` extra が導入する `pytesseract` パッケージは、あくまで
+その薄いラッパーに過ぎず、これが無いと OCR は何も検出できず黙って空の結果を
+返します(シーン検出とタイムスタンプは純粋な OpenCV の処理なので、いずれの
+場合でも問題なく動作します)。デフォルトでは英語*と*ロシア語(`eng+rus`、
+`.env.example` の `COGNIVORE_OCR_LANGUAGES` を参照)を認識します —— Debian/Ubuntu
+では素の `tesseract-ocr` パッケージが `eng` を自動的に導入しますが `rus` は
+導入しないため、両方を明示的にインストールしてください:
+
+```bash
+sudo apt install tesseract-ocr tesseract-ocr-rus   # Debian/Ubuntu
+brew install tesseract                              # macOS —— すべての言語がまとめて入ります
+# Windows: https://github.com/UB-Mannheim/tesseract/wiki(インストーラーの言語一覧でロシア語にチェック)
+```
+
+Docker イメージには両方とも最初から含まれているため、そちらでは何もインストール
+する必要はありません。
+
+学習済みデータパッケージが入っていない言語を指定してもエラーにはならず ——
+その文字種を見た目が似ているラテン文字として黙って誤認識します(キリル文字の
+「Контейнеры」は「KoHTewHepbi」になります)。これは言語パックの欠落というより、
+スキャン品質が悪いように見えます。画面内テキストが別の言語を使っている場合は、
+対応する `tesseract-ocr-<lang>` パッケージをインストールし、
+`COGNIVORE_OCR_LANGUAGES` に追加してください(例:`eng+rus+deu`)。
+
+`analyze_video` の OCR が想定しているのは、このツール自身の説明が名指し
+している用途 —— スクリーンキャスト、講義の録画、スライド形式の動画 ——
+であり、そこではテキストが大きく、意図的に読みやすく構成されています。
+生のターミナル/IDE 画面録画ではずっと厳しい戦いになります: 小さな等幅
+フォント、このツールがシーン検出の起点とするまさにその場面転換で強くかかる
+動画圧縮、そして OCR モデルが一度も学習したことのない罫線素片や記号
+グリフが原因です。圧縮によって細部の情報が既に失われてしまった後では、
+OCR の前にフレームを拡大したり二値化したりしても確実な改善は得られません
+—— これは推測ではなく、実際にテストして確認した結果です。画面上のターミ
+ナル/コードのテキストを OCR できちんと読み取りたいのであれば、より大きな
+フォントサイズや高い解像度で録画してください。実際に効くのはそのレバーで
+あり、事後の後処理ではありません。
 
 ### Docker
 
@@ -170,13 +210,35 @@ docker run -d -p 8420:8420 -v cognivore-data:/data \
 上記の明示的な `--add-host` は、それが無ければ解決できない通常の Linux 上でも同じ
 コマンドを動作させるためのものです。
 
-このイメージには音声/動画ツール(`faster-whisper`、OpenCV)が含まれていますが、
+このイメージには音声/動画ツール(`faster-whisper`、OpenCV、そして画面内テキスト
+OCR 用の Tesseract)が含まれていますが、
 `llama-cpp-python` は*含まれていません* —— GGUF ファイルをプロセス内でロードする
 代わりに、LLM とのやり取りには通常の HTTP で Ollama と通信します。これは意図的な設計で、
 llama-cpp-python はすべてのプラットフォーム向けのビルド済みホイールを持っておらず、
 ランタイムステージには存在しないコンパイラが必要になるためです。それでもコンテナ内で
 プロセス内 GGUF 推論を行いたい場合は、最終ステージに `build-essential` を追加し、
 `pip install` を `[all]` extra に切り替えてください。
+
+`faster-whisper` は、音声の書き起こしが実際に使われた最初のタイミングで(ビルド時
+ではなく)Hugging Face から音声認識モデルをダウンロードします。これは LLM 用の
+`ollama pull` と同じですが、違いは明示的なコマンドを必要とせず、初回利用時に自動的
+に行われる点です。Ollama のモデルと同様、これは永続化された `cognivore-data`
+ボリューム(`HF_HOME=/data/hf-cache`)にキャッシュされるため、`docker compose up
+--build` のたびにではなく、一度だけダウンロードされます。
+
+**停止と再起動**(例:再起動後):
+
+```bash
+docker compose down   # 両方のコンテナを停止する。データは保持される(下記参照)
+docker compose up -d  # 再度起動する —— イメージ自体が変わっていない限り --build は不要
+```
+
+両方のサービスは `restart: unless-stopped` に設定されているため、シャットダウン前に
+手動で停止していなければ、Docker デーモンが復帰した時点で(ほとんどの環境ではこれが
+デフォルトです)Docker が自動的に再起動します —— その場合はコマンドは一切不要です。
+ナレッジベースと、キャッシュされた Whisper/Ollama のモデルは、名前付きボリューム
+`cognivore-data` と `ollama-data` に格納されており、`docker compose down` はこれらに
+触れません。明示的に `docker compose down -v` を実行した場合のみ削除されます。
 
 **ビルド済みイメージ(ビルド手順が一切不要):** タグ付きリリースは、
 [`.github/workflows/docker-publish.yml`](../../.github/workflows/docker-publish.yml)

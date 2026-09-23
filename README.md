@@ -65,8 +65,8 @@ dependencies are missing) are implemented rather than imported.
   vector + BM25 hybrid retrieval.
 - **Multimodal tools**: safe (AST-based, no `eval`) calculator, knowledge-
   base search, audio transcription + rough speaker turns
-  (`faster-whisper`), and video scene-detection + OCR (OpenCV) -- all
-  CPU-only, no PyTorch.
+  (`faster-whisper`), and video scene-detection (OpenCV) + on-screen text
+  OCR (Tesseract) -- all CPU-only, no PyTorch.
 - **Pluggable LLM backend**: local GGUF inference via `llama-cpp-python`,
   or a deterministic, dependency-free `FakeLLMBackend` that exercises the
   exact same tool-calling code path with zero download -- what the test
@@ -120,6 +120,43 @@ Audio/video tools need their own extras: `pip install -e ".[audio,video]"`
 (or `.[all]` for everything, GGUF included). See `.env.example` for every
 setting.
 
+On-screen text extraction in the video tool (`analyze_video`) needs the
+[Tesseract](https://github.com/tesseract-ocr/tesseract) OCR *binary* as
+well -- the `pytesseract` package pulled in by the `video` extra is just a
+thin wrapper around it, and OCR silently returns no text without it (scene
+detection and timestamps still work either way, since that part is pure
+OpenCV). By default it recognizes English *and* Russian (`eng+rus`, see
+`COGNIVORE_OCR_LANGUAGES` in `.env.example`) -- on Debian/Ubuntu the plain
+`tesseract-ocr` package pulls in `eng` automatically but not `rus`, so
+install both explicitly:
+
+```bash
+sudo apt install tesseract-ocr tesseract-ocr-rus   # Debian/Ubuntu
+brew install tesseract                              # macOS -- ships every language together
+# Windows: https://github.com/UB-Mannheim/tesseract/wiki (tick Russian in the installer's language list)
+```
+
+The Docker image already includes both -- nothing to install there.
+
+Requesting a language whose trained-data package isn't installed doesn't
+error out -- it silently mis-recognizes that script as look-alike Latin
+letters (Cyrillic "Контейнеры" comes out as "KoHTewHepbi"), which reads
+like a bad scan rather than a missing language pack. If your on-screen
+text uses another language, install its `tesseract-ocr-<lang>` package
+and add it to `COGNIVORE_OCR_LANGUAGES` (e.g. `eng+rus+deu`).
+
+`analyze_video`'s OCR is aimed at the content its own tool description
+names -- screencasts, lecture recordings, slide-based videos -- where text
+is large and deliberately composed. It's a much rougher ride on a raw
+terminal/IDE screen recording: small monospace font, heavy video
+compression right at the scene cuts this tool keys off of, and box-drawing
+or symbol glyphs OCR models were never trained on. Upscaling or
+thresholding the frame before OCR doesn't reliably help once compression
+has already thrown away the fine detail -- confirmed by testing it, not
+assumed. If you specifically want on-screen terminal/code text to OCR
+well, record at a larger font size and/or higher resolution; that's the
+lever that actually works, not post-processing after the fact.
+
 ### Docker
 
 The image is a multi-stage build (compiles the native C++ extension, then
@@ -170,13 +207,37 @@ docker run -d -p 8420:8420 -v cognivore-data:/data \
 (Windows/macOS); the explicit `--add-host` above is what makes the same
 command also work on plain Linux, where it otherwise doesn't resolve.
 
-The image ships the audio/video tools (`faster-whisper`, OpenCV) but *not*
-`llama-cpp-python` -- it talks to Ollama over plain HTTP for the LLM
+The image ships the audio/video tools (`faster-whisper`, OpenCV, and
+Tesseract for on-screen text OCR) but *not* `llama-cpp-python` -- it talks
+to Ollama over plain HTTP for the LLM
 instead of loading a GGUF file in-process, deliberately, since
 llama-cpp-python has no prebuilt wheel for every platform and needs a
 compiler the runtime stage doesn't carry. Want in-process GGUF inference
 inside the container anyway? Add `build-essential` to the final stage and
 switch its `pip install` back to the `[all]` extra.
+
+`faster-whisper` downloads its speech-recognition model from Hugging Face
+the first time audio transcription is actually used (not at build time),
+same as `ollama pull` for the LLM -- the difference is this one happens
+automatically on first use rather than needing an explicit command. Like
+Ollama's models, it's cached in the persisted `cognivore-data` volume
+(`HF_HOME=/data/hf-cache`), so it only downloads once, not on every
+`docker compose up --build`.
+
+**Stopping and restarting** (e.g. after a reboot):
+
+```bash
+docker compose down   # stops both containers; data is kept (see below)
+docker compose up -d  # starts again -- no --build needed unless the image itself changed
+```
+
+Both services are set to `restart: unless-stopped`, so if you didn't stop
+them manually before shutting down, Docker restarts them on its own once
+the Docker daemon comes back up (the default on most installs) -- no
+command needed at all in that case. The knowledge base and the cached
+Whisper/Ollama models live in the named volumes `cognivore-data` and
+`ollama-data`, which `docker compose down` never touches; only an explicit
+`docker compose down -v` removes them.
 
 **Prebuilt image (no build step at all):** tagged releases are published
 multi-arch (amd64 + arm64 -- Apple Silicon and Raspberry Pi included) to
