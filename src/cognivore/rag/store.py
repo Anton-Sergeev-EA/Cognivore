@@ -164,12 +164,12 @@ class DocumentStore:
                 for cid, text in self._chunks.items()
             ],
         }
-        (directory / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2))
+        (directory / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
     @classmethod
     def load(cls, directory: str | Path, embedder: EmbeddingModel) -> DocumentStore:
         directory = Path(directory)
-        meta = json.loads((directory / "meta.json").read_text())
+        meta = json.loads((directory / "meta.json").read_text(encoding="utf-8"))
         store = cls(embedder=embedder, use_approximate_index=meta["use_ann"])
         blob = (directory / "index.bin").read_bytes()
         if store._use_ann:
