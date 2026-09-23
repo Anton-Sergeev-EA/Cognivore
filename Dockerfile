@@ -2,7 +2,7 @@
 # then copy the installed package into a slim runtime image so the final
 # image doesn't carry a C++ compiler around.
 
-FROM python:3.11-slim AS builder
+FROM python:3.14-slim AS builder
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
@@ -14,7 +14,7 @@ RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir build \
     && python -m build --wheel
 
-FROM python:3.11-slim
+FROM python:3.14-slim
 LABEL org.opencontainers.image.title="cognivore" \
       org.opencontainers.image.description="Local-first multimodal agent framework" \
       org.opencontainers.image.source="https://github.com/Anton-Sergeev-EA/cognivore" \
