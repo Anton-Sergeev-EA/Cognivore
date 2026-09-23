@@ -107,7 +107,7 @@ def test_agent_falls_back_to_users_own_wording_when_model_translates_the_query()
     # the answer by also trying the original, untranslated question.
     store = DocumentStore(embedder=HashingEmbedder(dim=64))
     store.add_text(
-        "Возврат средств возможен в течение 14 дней с момента оплаты.",  # noqa: RUF001
+        "Возврат средств возможен в течение 14 дней с момента оплаты.",
         source="policy.md",
     )
     tools = ToolRegistry([RagSearchTool(store)])

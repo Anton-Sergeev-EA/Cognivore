@@ -75,3 +75,52 @@ def test_search_multi_deduplicates_and_keeps_best_score(document_store: Document
         ["machine learning programming", "machine learning programming"], top_k=5
     )
     assert len({r.id for r in results}) == len(results)
+
+
+def test_save_and_load_keeps_vectors_without_reembedding(
+    tmp_path: Path, hashing_embedder: HashingEmbedder
+) -> None:
+    store = DocumentStore(embedder=hashing_embedder, use_approximate_index=False)
+    store.add_text("Cats are small domesticated carnivorous mammals.", source="animals.md")
+    store.save(tmp_path / "store")
+    assert (tmp_path / "store" / "vectors.npy").exists()
+
+    loaded = DocumentStore.load(tmp_path / "store", embedder=hashing_embedder)
+    assert not loaded.reindexed
+    _ids, matrix = loaded.vector_matrix()
+    _, original = store.vector_matrix()
+    assert matrix.shape == original.shape
+    assert (matrix == original).all()
+
+
+def test_load_with_a_different_embedder_reembeds(tmp_path: Path) -> None:
+    # Regression guard: vectors from one embedder compared against queries
+    # from another silently return garbage, so a mismatch must re-embed.
+    store = DocumentStore(embedder=HashingEmbedder(dim=64), use_approximate_index=False)
+    store.add_text("Cats are small domesticated carnivorous mammals.", source="animals.md")
+    store.save(tmp_path / "store")
+
+    other = HashingEmbedder(dim=64, ngram_range=(1, 1))
+    loaded = DocumentStore.load(tmp_path / "store", embedder=other)
+    assert loaded.reindexed
+    hits = loaded.search("domesticated mammals", top_k=1)
+    assert hits and hits[0].source == "animals.md"
+
+
+def test_load_of_a_store_saved_before_vectors_were_persisted(
+    tmp_path: Path, hashing_embedder: HashingEmbedder
+) -> None:
+    store = DocumentStore(embedder=hashing_embedder, use_approximate_index=False)
+    store.add_text("Cats are small domesticated carnivorous mammals.", source="animals.md")
+    store.save(tmp_path / "store")
+    (tmp_path / "store" / "vectors.npy").unlink()
+
+    loaded = DocumentStore.load(tmp_path / "store", embedder=hashing_embedder)
+    assert loaded.reindexed
+    assert loaded.search("mammals", top_k=1)[0].source == "animals.md"
+
+
+def test_version_changes_on_every_add(document_store: DocumentStore) -> None:
+    before = document_store.version
+    document_store.add_text("One more document.", source="x.md")
+    assert document_store.version == before + 1

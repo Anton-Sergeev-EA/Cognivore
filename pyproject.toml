@@ -89,6 +89,13 @@ ignore = ["E501"]
 # signature) -- not the mutable-default-argument footgun B008 warns about.
 "src/cognivore/web/app.py" = ["B008"]
 "src/cognivore/cli.py" = ["B008"]
+# Multilingual stopword lists: Cyrillic/CJK characters are the point
+# (RUF001), and space-separated word strings read far better than
+# hundred-element list literals (SIM905).
+"src/cognivore/rag/tokenize.py" = ["RUF001", "SIM905"]
+# Tests exercise Russian and Chinese input on purpose; CJK punctuation
+# (？ ： ，) in those fixtures is the real thing, not a typo.
+"tests/*" = ["RUF001"]
 
 [tool.mypy]
 python_version = "3.10"

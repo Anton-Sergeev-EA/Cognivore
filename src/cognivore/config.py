@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     seed_demo_kb: bool = Field(
         default=False,
         description="On a fresh (empty) knowledge base, seed it automatically with the "
-        "bundled demo company handbooks (English + Russian) so there's something to ask "
+        "bundled demo company handbooks (one per UI language) so there's something to ask "
         "about immediately -- handy for a first run, a live demo, or a fresh container with "
         "no prior volume. Never overwrites or touches an already-populated knowledge base. "
         "docker-compose.yml enables this by default; set to false to start empty instead.",
@@ -59,7 +59,14 @@ class Settings(BaseSettings):
     )
 
     # -- Embeddings ------------------------------------------------------
-    embedding_model: str = Field(default="BAAI/bge-small-en-v1.5")
+    embedding_model: str = Field(
+        default="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        description="fastembed model name. The default is multilingual (50+ languages, "
+        "including Russian and Chinese, 384-dim, ~220 MB) because the UI and demo content ship "
+        "in Russian, English and Chinese; an English-only model such as "
+        "'BAAI/bge-small-en-v1.5' is smaller but maps non-English text poorly. Changing it "
+        "re-embeds an existing knowledge base automatically on next start.",
+    )
     embedding_dim: int = Field(default=384, description="Must match embedding_model's output dim")
     prefer_semantic_embedder: bool = Field(
         default=True,
@@ -73,6 +80,20 @@ class Settings(BaseSettings):
     retrieval_top_k: int = Field(default=5, ge=1)
     use_approximate_index: bool = Field(
         default=True, description="Use the C++ NSWIndex when available instead of exact FlatIndex"
+    )
+
+    # -- Explainability (cognivore.ml) -----------------------------------
+    gap_threshold: float = Field(
+        default=0.3,
+        ge=0.0,
+        le=1.0,
+        description="Retrieval confidence below which a knowledge-base question is recorded "
+        "as a knowledge gap (shown in the web UI's gap radar).",
+    )
+    map_max_points: int = Field(
+        default=1500,
+        ge=10,
+        description="Most chunks drawn on the knowledge map; larger stores are sampled.",
     )
 
     # -- Agent -----------------------------------------------------------
@@ -96,6 +117,12 @@ class Settings(BaseSettings):
     # -- Web server --------------------------------------------------------
     host: str = Field(default="127.0.0.1")
     port: int = Field(default=8420)
+    max_document_upload_mb: int = Field(
+        default=20, ge=1, description="Largest text/markdown file accepted for ingestion."
+    )
+    max_media_upload_mb: int = Field(
+        default=512, ge=1, description="Largest audio/video file accepted by the media tools."
+    )
 
     def ensure_data_dir(self) -> Path:
         self.data_dir.mkdir(parents=True, exist_ok=True)

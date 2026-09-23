@@ -135,6 +135,14 @@ def load_or_build_document_store(
             embedder = build_document_store(settings).embedder
             store = DocumentStore.load(store_dir, embedder=embedder)
             logger.info("Restored knowledge base from %s (%d chunks).", store_dir, len(store))
+            if store.reindexed:
+                # Persist the re-embedded vectors right away so the
+                # (potentially slow) re-embedding happens once, not on
+                # every start.
+                try:
+                    store.save(store_dir)
+                except OSError:
+                    logger.warning("Could not persist the re-embedded knowledge base.")
             return store
         except Exception:
             logger.warning(
@@ -151,12 +159,19 @@ def load_or_build_document_store(
 _DEMO_CONTENT_LABELS = {
     "company_kb_en.md": "Skylark Cloud demo knowledge base (EN)",
     "company_kb_ru.md": "NordCloud demo knowledge base (RU)",
+    "company_kb_zh.md": "QingLan Cloud demo knowledge base (ZH)",
+    "company_kb_es.md": "Cóndor Cloud demo knowledge base (ES)",
+    "company_kb_hi.md": "Garuda Cloud demo knowledge base (HI)",
+    "company_kb_fr.md": "Héron Cloud demo knowledge base (FR)",
+    "company_kb_de.md": "Falke Cloud demo knowledge base (DE)",
+    "company_kb_ja.md": "Tsubame Cloud demo knowledge base (JA)",
+    "company_kb_it.md": "Airone Cloud demo knowledge base (IT)",
 }
 
 
 def seed_demo_knowledge_base(store: DocumentStore, settings: Settings) -> int:
-    """Adds the bundled demo company handbooks (English + Russian fictional
-    SaaS companies -- pricing, SLA, security, refund policy, support FAQ)
+    """Adds the bundled demo company handbooks (one fictional SaaS company per
+    UI language -- pricing, SLA, security, refund policy, support FAQ)
     to ``store``, so a brand-new install or a fresh container has something
     substantive to search and ask about immediately, in more than one
     language, with zero setup.

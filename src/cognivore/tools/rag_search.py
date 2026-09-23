@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import Any, ClassVar
 
+from cognivore.rag.snippets import best_snippet
 from cognivore.rag.store import DocumentStore
 from cognivore.tools.base import Tool
 
@@ -52,6 +53,8 @@ class RagSearchTool(Tool):
             # Shorter snippets keep the Observation text (which the model
             # re-reads on its very next, slowest-so-far call) from adding
             # unnecessary prefill time on CPU-only inference.
-            snippet = hit.text[:300]
+            # The part of the chunk that matches the question, not just
+            # its first 300 characters (see cognivore.rag.snippets).
+            snippet = best_snippet(hit.text, f"{query} {_user_input}", limit=300)
             lines.append(f"[{i}] ({hit.source}) {snippet}")
         return "\n\n".join(lines)

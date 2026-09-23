@@ -21,6 +21,8 @@ from typing import Protocol, runtime_checkable
 
 import numpy as np
 
+from cognivore.rag.tokenize import STOPWORDS, tokenize
+
 logger = logging.getLogger(__name__)
 
 
@@ -28,16 +30,37 @@ logger = logging.getLogger(__name__)
 class EmbeddingModel(Protocol):
     dim: int
 
+    # A stable identifier of *which* vectors this model produces. Stored
+    # alongside a persisted knowledge base so that switching models (or a
+    # tokenizer change in HashingEmbedder) is detected on load and the
+    # store is re-embedded, instead of silently comparing query vectors
+    # from one model against document vectors from another.
+    @property
+    def id(self) -> str: ...
+
     def embed(self, texts: list[str]) -> list[list[float]]: ...
 
 
 class HashingEmbedder:
+    # Bump the version whenever tokenization or hashing changes, so stores
+    # embedded with the old scheme are re-embedded on load.
+    _VERSION = 3
+
     def __init__(self, dim: int = 384, ngram_range: tuple[int, int] = (1, 2)) -> None:
         self.dim = dim
         self.ngram_range = ngram_range
 
+    @property
+    def id(self) -> str:
+        lo, hi = self.ngram_range
+        return f"hashing-v{self._VERSION}:{self.dim}:{lo}-{hi}"
+
     def _tokens(self, text: str) -> list[str]:
-        words = text.lower().split()
+        # Function words ("les", "et", "der", "的") carry no topic and, being
+        # the most frequent tokens, would otherwise dominate the hashed
+        # vector; they are dropped unless nothing else is left.
+        all_words = tokenize(text)
+        words = [w for w in all_words if w not in STOPWORDS] or all_words
         if not words:
             return [text.lower()]
         lo, hi = self.ngram_range
@@ -64,7 +87,11 @@ class HashingEmbedder:
 
 
 class FastEmbedModel:
-    def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5", dim: int = 384) -> None:
+    def __init__(
+        self,
+        model_name: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        dim: int = 384,
+    ) -> None:
         try:
             from fastembed import TextEmbedding
         except ImportError as exc:
@@ -74,7 +101,12 @@ class FastEmbedModel:
                 "zero-download offline embedder."
             ) from exc
         self._model = TextEmbedding(model_name=model_name)
+        self.model_name = model_name
         self.dim = dim
+
+    @property
+    def id(self) -> str:
+        return f"fastembed:{self.model_name}"
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         return [vec.tolist() for vec in self._model.embed(texts)]
