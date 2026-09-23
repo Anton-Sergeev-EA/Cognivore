@@ -164,7 +164,9 @@ class DocumentStore:
                 for cid, text in self._chunks.items()
             ],
         }
-        (directory / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+        (directory / "meta.json").write_text(
+            json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
     @classmethod
     def load(cls, directory: str | Path, embedder: EmbeddingModel) -> DocumentStore:
