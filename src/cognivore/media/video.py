@@ -46,6 +46,7 @@ def extract_keyframes(
     scene_threshold: float = 30.0,
     max_keyframes: int = 24,
     run_ocr: bool = True,
+    ocr_languages: str = "eng+rus",
 ) -> list[Keyframe]:
     cv2 = _require_cv2()
     cap = cv2.VideoCapture(video_path)
@@ -72,7 +73,7 @@ def extract_keyframes(
                 is_scene_change = diff > scene_threshold
 
             if is_scene_change:
-                text = _ocr_frame(frame) if run_ocr else ""
+                text = _ocr_frame(frame, lang=ocr_languages) if run_ocr else ""
                 keyframes.append(
                     Keyframe(timestamp=frame_index / fps, frame_index=frame_index, ocr_text=text)
                 )
@@ -85,13 +86,13 @@ def extract_keyframes(
     return keyframes
 
 
-def _ocr_frame(frame) -> str:
+def _ocr_frame(frame, lang: str = "eng+rus") -> str:
     try:
         import pytesseract
     except ImportError:
         return ""
     try:
-        return pytesseract.image_to_string(frame).strip()
+        return pytesseract.image_to_string(frame, lang=lang).strip()
     except Exception:  # pragma: no cover - depends on the tesseract binary being installed
         return ""
 

@@ -59,8 +59,64 @@ project uses [Semantic Versioning](https://semver.org/).
   the Docker image. Idempotent and never touches a knowledge base that
   already has real content in it.
 
+### Changed
+
+- README.md (and all 8 translations): documented the `docker compose down`
+  / `up -d` stop-and-restart flow, that `restart: unless-stopped` brings
+  both containers back on their own after a reboot if they weren't stopped
+  manually first, and that `cognivore-data`/`ollama-data` survive `down`
+  (only an explicit `down -v` removes them).
+- README.md (and all 8 translations): documented that `analyze_video`'s
+  OCR targets the content its own tool description names -- screencasts,
+  lecture recordings, slide-based videos -- and is a much rougher ride on
+  a raw terminal/IDE recording (small monospace font, compression
+  artifacts right at scene cuts, glyphs like box-drawing characters the
+  OCR model was never trained on). Tested that upscaling/thresholding the
+  frame doesn't reliably help once compression has already discarded the
+  detail, so the README points at recording with a larger font/higher
+  resolution instead of promising a post-processing fix that doesn't
+  actually work.
+
 ### Fixed
 
+- On-screen text OCR in the video tool (`analyze_video`) silently produced
+  no text at all: `pytesseract` was never declared as a dependency (in
+  the `video` extra or anywhere else), so `_ocr_frame`'s `import
+  pytesseract` always raised `ImportError`, which was caught and returned
+  as `""` -- indistinguishable from "this frame just has no text on it."
+  Scene detection and timestamps were unaffected (pure OpenCV), which is
+  what made the gap easy to miss. Fixed by adding `pytesseract` to the
+  `video` extra, installing the native `tesseract-ocr` binary it wraps in
+  the Docker image's runtime stage, documenting the same binary
+  requirement for native (non-Docker) installs, and adding real,
+  non-mocked test coverage (`tests/test_video.py`) that exercises OCR
+  end-to-end against a synthetic video with burned-in text.
+- On-screen OCR was hardcoded to English-only, so Cyrillic text (a Russian
+  terminal or UI in a screen recording, say) came back mis-recognized as
+  look-alike Latin letters -- e.g. "Контейнеры запущены" as "KoHTewHepbi
+  3anylueHbl" -- confirmed live, and easy to mistake for a bad-quality scan
+  rather than a language mismatch, since Tesseract doesn't error out on a
+  wrong-language request, it just quietly reads the wrong alphabet. Fixed
+  by adding a new `ocr_languages` setting (`COGNIVORE_OCR_LANGUAGES`,
+  default `"eng+rus"`, threaded through `VideoAnalyzeTool` ->
+  `extract_keyframes` -> `_ocr_frame`), installing `tesseract-ocr-rus` in
+  the Docker image alongside `tesseract-ocr-eng`, documenting the
+  install step (and the silent-mismatch pitfall) for native installs, and
+  adding a real regression test pair in `tests/test_video.py` that OCRs
+  actual Cyrillic text and confirms it comes back correctly with the new
+  default but garbled when forced to `eng`-only.
+- Docker image: the `faster-whisper` speech-recognition model has no
+  dedicated cache volume (unlike Ollama's `ollama-data`), so its
+  Hugging Face model cache landed in the container's throwaway home
+  directory -- re-downloaded on every `docker compose up --build`
+  instead of once. Fixed by setting `HF_HOME=/data/hf-cache`, so it now
+  shares the already-persisted `cognivore-data` volume. Also added
+  `tests/test_audio.py` (previously zero coverage for the audio module):
+  real, non-mocked tests for the speaker-turn heuristic, a locked-in
+  check that a missing `faster-whisper` fails loudly (it already did --
+  unlike the OCR case above), and an end-to-end transcription test
+  against synthesized speech that self-skips without network access to
+  Hugging Face or a local TTS engine.
 - `cognivore ingest` (and the CLI generally) built a brand-new, empty
   `DocumentStore` on every invocation instead of loading whatever was
   already persisted at `store_dir` -- confirmed by writing a regression

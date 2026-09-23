@@ -70,8 +70,8 @@ optionnelles) sont implémentées plutôt qu'importées.
 - **Outils multimodaux** : calculatrice sûre (basée sur l'AST, sans
   `eval`), recherche dans la base de connaissances, transcription audio +
   segmentation approximative par locuteur (`faster-whisper`), et
-  détection de scènes vidéo + OCR (OpenCV) -- tout cela sur CPU
-  uniquement, sans PyTorch.
+  détection de scènes vidéo (OpenCV) + OCR du texte à l'écran (Tesseract)
+  -- tout cela sur CPU uniquement, sans PyTorch.
 - **Backend LLM interchangeable** : inférence locale au format GGUF via
   `llama-cpp-python`, ou un `FakeLLMBackend` déterministe et sans
   dépendance qui exerce exactement le même chemin de code d'appel
@@ -127,6 +127,51 @@ cognivore chat           # détecte automatiquement le serveur Ollama en cours d
 Les outils audio/vidéo nécessitent leurs propres extras :
 `pip install -e ".[audio,video]"` (ou `.[all]` pour tout avoir, GGUF
 compris). Voir `.env.example` pour la liste complète des réglages.
+
+L'extraction du texte à l'écran dans l'outil vidéo (`analyze_video`)
+nécessite en plus le *binaire* OCR
+[Tesseract](https://github.com/tesseract-ocr/tesseract) -- le paquet
+`pytesseract` installé par l'extra `video` n'en est qu'un fin wrapper, et
+sans lui l'OCR ne renvoie silencieusement aucun texte (la détection de
+scènes et les horodatages continuent malgré tout de fonctionner, car
+cette partie repose uniquement sur OpenCV). Par défaut, il reconnaît
+l'anglais *et* le russe (`eng+rus`, voir `COGNIVORE_OCR_LANGUAGES` dans
+`.env.example`) -- sur Debian/Ubuntu, le paquet `tesseract-ocr` de base
+embarque automatiquement `eng` mais pas `rus`, donc installez les deux
+explicitement :
+
+```bash
+sudo apt install tesseract-ocr tesseract-ocr-rus   # Debian/Ubuntu
+brew install tesseract                              # macOS -- toutes les langues sont fournies ensemble
+# Windows : https://github.com/UB-Mannheim/tesseract/wiki (cochez le russe dans la liste des langues de l'installeur)
+```
+
+L'image Docker embarque déjà les deux -- rien à installer de ce côté-là.
+
+Demander une langue dont le paquet de données entraînées n'est pas
+installé ne provoque pas d'erreur -- Tesseract mé-reconnaît
+silencieusement cette écriture comme des lettres latines qui lui
+ressemblent (le cyrillique « Контейнеры » devient « KoHTewHepbi »), ce
+qui ressemble à un mauvais scan plutôt qu'à un pack de langue manquant.
+Si votre texte à l'écran utilise une autre langue, installez son paquet
+`tesseract-ocr-<lang>` et ajoutez-la à `COGNIVORE_OCR_LANGUAGES` (par
+exemple `eng+rus+deu`).
+
+L'OCR d'`analyze_video` vise le type de contenu que la description de
+l'outil lui-même désigne -- captures d'écran commentées, enregistrements
+de cours, vidéos à base de diapositives -- où le texte est grand et
+composé avec soin. C'est beaucoup plus laborieux sur l'enregistrement
+brut d'un terminal ou d'un IDE : police monospace de petite taille,
+forte compression vidéo précisément aux coupures de plan sur lesquelles
+cet outil s'appuie, et glyphes de dessin de boîtes ou symboles pour
+lesquels les modèles d'OCR n'ont jamais été entraînés. Suréchantillonner
+ou seuiller l'image avant l'OCR n'aide pas de façon fiable une fois que
+la compression a déjà sacrifié les détails fins -- ceci a été vérifié
+par des tests, pas simplement supposé. Si vous voulez spécifiquement que
+le texte de terminal ou de code affiché à l'écran soit bien reconnu par
+l'OCR, enregistrez avec une police plus grande et/ou une résolution plus
+élevée ; c'est le seul levier qui fonctionne réellement, pas un
+post-traitement après coup.
 
 ### Docker
 
@@ -184,14 +229,39 @@ docker run -d -p 8420:8420 -v cognivore-data:/data \
 la même commande de fonctionner aussi sur Linux classique, où ce nom ne
 se résout sinon pas.
 
-L'image embarque les outils audio/vidéo (`faster-whisper`, OpenCV) mais
-*pas* `llama-cpp-python` -- elle communique avec Ollama en HTTP simple
+L'image embarque les outils audio/vidéo (`faster-whisper`, OpenCV, et
+Tesseract pour l'OCR du texte à l'écran) mais *pas* `llama-cpp-python` -- elle communique avec Ollama en HTTP simple
 pour la LLM plutôt que de charger un fichier GGUF directement dans le
 processus, et ce délibérément, car llama-cpp-python n'a pas de wheel
 précompilée pour chaque plateforme et nécessite un compilateur que
 l'étape d'exécution n'embarque pas. Vous voulez malgré tout une inférence
 GGUF in-process dans le conteneur ? Ajoutez `build-essential` à l'étape
 finale et faites repointer son `pip install` vers l'extra `[all]`.
+
+`faster-whisper` télécharge son modèle de reconnaissance vocale depuis
+Hugging Face la première fois que la transcription audio est réellement
+utilisée (pas au moment du build), comme `ollama pull` pour la LLM --
+la différence est que celui-ci se fait automatiquement dès la première
+utilisation plutôt que via une commande explicite. Comme les modèles
+d'Ollama, il est mis en cache dans le volume persistant `cognivore-data`
+(`HF_HOME=/data/hf-cache`), donc il ne se télécharge qu'une seule fois,
+pas à chaque `docker compose up --build`.
+
+**Arrêt et redémarrage** (par ex. après un redémarrage de la machine) :
+
+```bash
+docker compose down   # arrête les deux conteneurs ; les données sont conservées (voir plus bas)
+docker compose up -d  # redémarre -- pas besoin de --build sauf si l'image elle-même a changé
+```
+
+Les deux services sont configurés avec `restart: unless-stopped` : si vous ne
+les avez pas arrêtés manuellement avant l'extinction, Docker les redémarre
+automatiquement dès que le démon Docker revient (le comportement par défaut
+sur la plupart des installations) -- aucune commande n'est alors nécessaire
+du tout. La base de connaissances et les modèles Whisper/Ollama mis en cache
+vivent dans les volumes nommés `cognivore-data` et `ollama-data`, que `docker
+compose down` ne touche jamais ; seul un `docker compose down -v` explicite
+les supprime.
 
 **Image préconstruite (aucune étape de build du tout) :** les versions
 taguées sont publiées en multi-architecture (amd64 + arm64 -- Apple

@@ -45,7 +45,7 @@ dependencies = [
 [project.optional-dependencies]
 llm = ["llama-cpp-python>=0.2.90"]
 audio = ["faster-whisper>=1.0"]
-video = ["opencv-python-headless>=4.9"]
+video = ["opencv-python-headless>=4.9", "pytesseract>=0.3.10"]
 all = ["cognivore[llm,audio,video]"]
 dev = [
     "pytest>=8.1",
