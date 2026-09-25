@@ -17,8 +17,109 @@ import re
 from collections.abc import Iterator
 
 from cognivore.llm.base import ChatMessage, GenerationConfig
+from cognivore.ml.lang import detect_language
 
 _MATH_CANDIDATE_RE = re.compile(r"[\d().\s+\-*/]{3,}")
+# The search tool formats hits as "[1] (source) passage\n\n[2] ...".
+# Lazy source match: labels themselves may contain parentheses, e.g.
+# "(NordCloud demo knowledge base (RU))".
+_TOP_PASSAGE_RE = re.compile(r"^\[1\] \((?P<source>.*?)\) (?P<text>.*?)(?:\n\n\[2\] |\Z)", re.S)
+# Markdown heading markers can sit mid-line once chunking has joined lines.
+_MARKDOWN_RE = re.compile(r"(?:^|(?<=\s))#{1,6}\s+|\*\*|__", re.M)
+
+# Explicit "look it up" requests, in the three UI languages.
+_SEARCH_KEYWORDS = (
+    "search",
+    "knowledge base",
+    "document",
+    "find in",
+    "найди",
+    "поиск",
+    "база знаний",
+    "базе знаний",
+    "документ",
+    "搜索",
+    "查找",
+    "知识库",
+    "文档",
+)
+_QUESTION_STARTS = (
+    "what",
+    "how",
+    "which",
+    "when",
+    "where",
+    "why",
+    "who",
+    "is ",
+    "are ",
+    "do ",
+    "does ",
+    "can ",
+    "что",
+    "как",
+    "какой",
+    "какая",
+    "какие",
+    "каков",
+    "сколько",
+    "когда",
+    "где",
+    "почему",
+    "зачем",
+    "кто",
+    "есть ли",
+    "можно ли",
+)
+_ZH_QUESTION_MARKERS = ("吗", "什么", "多少", "怎么", "如何", "哪", "是否", "能否", "可以")
+_OFFLINE_ECHO = {
+    "ru": "(офлайн-демо) Вы написали: {text}",
+    "zh": "（离线演示模式）您输入的是：{text}",  # noqa: RUF001 - CJK punctuation is correct here
+    "ja": "（オフラインデモ）入力内容：{text}",  # noqa: RUF001 - CJK punctuation is correct here
+    "hi": "(ऑफ़लाइन डेमो) आपने लिखा: {text}",
+    "en": "(offline demo mode) You said: {text}",
+}
+
+
+_NUM = r"(\d+(?:[.,]\d+)?)"
+# "15% of 149" and its forms in the UI languages: от/из (ru), de (es/fr),
+# du (fr), von (de), di (it).
+_PERCENT_OF_RE = re.compile(_NUM + r"\s*%\s*(?:of|от|из|de|du|von|di)\s+" + _NUM, re.I)
+# Base-first word order: "999 的 15%" (zh), "149 の 15%" (ja), "149 का 15%" (hi).
+_PERCENT_ZH_RE = re.compile(_NUM + r"\s*(?:的|の|का)\s*" + _NUM + r"\s*%")
+
+
+def _extract_percent_expression(text: str) -> str | None:
+    """Turns "15% of 149" (and its forms in the other UI languages) into
+    ``149 * 15 / 100`` so the offline demo can route it to the calculator."""
+    match = _PERCENT_OF_RE.search(text)
+    if match:
+        pct, base = match.groups()
+    else:
+        match = _PERCENT_ZH_RE.search(text)
+        if not match:
+            return None
+        base, pct = match.groups()
+    return f"{base.replace(',', '.')} * {pct.replace(',', '.')} / 100"
+
+
+def _looks_like_question(text: str) -> bool:
+    stripped = text.strip().lower()
+    if stripped.endswith(("?", "\uff1f")):
+        return True
+    if stripped.startswith(_QUESTION_STARTS):
+        return True
+    return any(marker in stripped for marker in _ZH_QUESTION_MARKERS)
+
+
+def _offline_answer_from_observation(observation: str) -> str:
+    """With the search tool's formatted hits, answer with the best passage
+    itself (the UI shows its source separately); anything else -- e.g. a
+    calculator result -- is echoed as-is."""
+    match = _TOP_PASSAGE_RE.match(observation)
+    if match is None:
+        return observation
+    return _MARKDOWN_RE.sub("", match.group("text")).strip()
 
 
 def _extract_math_expression(text: str) -> str | None:
@@ -51,24 +152,31 @@ class FakeLLMBackend:
             # reads both as one message; this fake backend still needs to
             # echo back only the observation itself to stay a faithful
             # stand-in for "the model used what it was given").
-            observation = observation.split("\n\n", 1)[0]
-            return f"Thought: I now have the observation I need.\nFinal Answer: {observation}"
+            observation = observation.rsplit("\n\nIf the passage above answers", 1)[0]
+            answer = _offline_answer_from_observation(observation)
+            return f"Thought: I now have the observation I need.\nFinal Answer: {answer}"
 
-        expr = _extract_math_expression(last_user)
+        expr = _extract_percent_expression(last_user) or _extract_math_expression(last_user)
         if expr:
             payload = json.dumps({"expression": expr})
             return f"Thought: This requires arithmetic, I'll use the calculator.\nAction: calculator\nAction Input: {payload}"
 
-        if any(
-            kw in last_user.lower() for kw in ("search", "knowledge base", "document", "find in")
-        ):
-            payload = json.dumps({"query": last_user})
+        # Only route to the search tool when the agent actually offers it
+        # (it is listed in the system prompt); otherwise a question would
+        # just produce an "unknown tool" error.
+        has_search = any(
+            m.role == "system" and "search_knowledge_base" in m.content for m in messages
+        )
+        wants_search = any(kw in last_user.lower() for kw in _SEARCH_KEYWORDS)
+        if has_search and (wants_search or _looks_like_question(last_user)):
+            payload = json.dumps({"query": last_user}, ensure_ascii=False)
             return (
                 "Thought: This may be answered by the ingested documents; I'll search them.\n"
                 f"Action: search_knowledge_base\nAction Input: {payload}"
             )
 
-        answer = self.canned_answer or f"(offline demo mode) You said: {last_user}"
+        template = _OFFLINE_ECHO.get(detect_language(last_user), _OFFLINE_ECHO["en"])
+        answer = self.canned_answer or template.format(text=last_user)
         return f"Thought: No tool is needed here.\nFinal Answer: {answer}"
 
     def stream(self, messages: list[ChatMessage], config: GenerationConfig) -> Iterator[str]:

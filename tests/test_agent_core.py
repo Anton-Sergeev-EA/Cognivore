@@ -140,3 +140,47 @@ def test_run_stream_does_not_leak_raw_react_syntax_into_answer_deltas() -> None:
     deltas = "".join(payload for kind, payload in events if kind == "answer_delta")
     assert "Action:" not in deltas
     assert "Thought:" not in deltas
+
+
+def _rag_agent() -> Agent:
+    store = DocumentStore(embedder=HashingEmbedder(dim=64))
+    store.add_text(
+        "## Политика возврата\n**Полный** возврат в течение 14 дней с момента оплаты.",
+        source="Demo KB (RU)",
+    )
+    tools = ToolRegistry([CalculatorTool(), RagSearchTool(store)])
+    return Agent(llm=FakeLLMBackend(), tools=tools)
+
+
+def test_offline_demo_searches_for_plain_questions_in_any_language() -> None:
+    agent = _rag_agent()
+    for question in ("Какая политика возврата?", "退款政策是什么？", "What is the refund policy?"):
+        result = agent.run(question)
+        assert any(t.action == "search_knowledge_base" for t in result.trace), question
+
+
+def test_offline_demo_answers_with_the_top_passage_only() -> None:
+    # Source labels contain parentheses ("Demo KB (RU)"), and passages may
+    # contain markdown; neither may leak into the answer.
+    result = _rag_agent().run("Какая политика возврата?")
+    assert result.answer.startswith("Политика возврата")
+    assert "[1]" not in result.answer
+    assert "**" not in result.answer and "##" not in result.answer
+
+
+def test_offline_demo_understands_percentages() -> None:
+    agent = _build_agent()
+    assert agent.run("Сколько будет 15% от 4900?").answer.strip() == "735"
+    assert agent.run("What is 15% of 149?").answer.strip() == "22.35"
+    assert agent.run("999 的 15% 是多少？").answer.strip() == "149.85"
+    assert agent.run("Wie viel sind 15 % von 149?").answer.strip() == "22.35"
+    assert agent.run("¿Cuánto es el 15 % de 149?").answer.strip() == "22.35"
+    assert agent.run("Combien font 15 % de 149 ?").answer.strip() == "22.35"
+    assert agent.run("Quanto fa il 15% di 149?").answer.strip() == "22.35"
+    assert agent.run("149 の 15% はいくつ？").answer.strip() == "22.35"
+    assert agent.run("149 का 15% कितना है?").answer.strip() == "22.35"
+
+
+def test_offline_demo_does_not_call_search_when_it_is_not_registered() -> None:
+    result = _build_agent().run("What is the capital of France?")
+    assert all(t.action is None for t in result.trace)
