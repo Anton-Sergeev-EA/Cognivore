@@ -1,9 +1,12 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Cognivore — explainable local-first AI: answers from your documents with a live knowledge map, sentence-level grounding and a knowledge-gap radar." />
+  <meta name="theme-color" content="#0b0e14" />
   <title>Cognivore</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%230b0e14'/%3E%3Cg stroke='%235eead4' stroke-width='3' fill='none'%3E%3Cpath d='M18 40 L32 20 L46 36'/%3E%3Cpath d='M32 20 L30 46'/%3E%3C/g%3E%3Cg fill='%235eead4'%3E%3Ccircle cx='18' cy='40' r='5'/%3E%3Ccircle cx='32' cy='20' r='5'/%3E%3Ccircle cx='46' cy='36' r='5'/%3E%3C/g%3E%3Ccircle cx='30' cy='46' r='5' fill='%23fbbf24'/%3E%3C/svg%3E" />
   <script>
     // Applied before the stylesheet paints anything, so the page never
     // flashes the wrong theme for a frame while theme.js loads. Kept as a
@@ -27,55 +30,73 @@
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-  <div class="shell">
-    <aside class="sidebar">
+  <div class="shell" id="shell">
+    <!-- ── Left: workspace ─────────────────────────────────────────── -->
+    <aside class="sidebar" id="sidebar">
       <div class="brand-row">
         <div class="brand">
-          <span class="brand-mark">◈</span>
+          <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true">
+            <g class="brand-edges"><path d="M14 42 L32 16 L50 36" /><path d="M32 16 L28 50" /><path d="M14 42 L28 50 L50 36" /></g>
+            <circle cx="14" cy="42" r="5" /><circle cx="32" cy="16" r="5" /><circle cx="50" cy="36" r="5" />
+            <circle class="brand-query" cx="28" cy="50" r="5" />
+          </svg>
           <span class="brand-name">Cognivore</span>
         </div>
-        <div class="controls-row">
-          <div id="theme-switch" class="theme-switch" role="group" aria-label="Theme"></div>
-          <select id="lang-select" class="lang-select" aria-label="Language"></select>
-        </div>
+        <button class="icon-btn only-mobile" id="sidebar-close" type="button" data-i18n-aria="menuClose" aria-label="Close menu">✕</button>
       </div>
-      <p class="tagline" data-i18n="tagline">Local-first agent · RAG · audio · video</p>
+      <p class="tagline" data-i18n="tagline">Explainable local AI</p>
+
+      <div class="prefs">
+        <label class="lang-picker">
+          <span class="lang-globe" aria-hidden="true">🌐</span>
+          <select id="lang-select" class="lang-select" data-i18n-aria="langLabel" aria-label="Language"></select>
+        </label>
+        <div id="theme-switch" class="segmented" role="group" data-i18n-aria="themeLabel" aria-label="Theme"></div>
+      </div>
 
       <section class="panel">
         <h2>
-          <span data-i18n="statusTitle">Status</span>
+          <span data-i18n="statusTitle">System</span>
           <span id="conn-dot" class="conn-dot" data-i18n-title="connOffline" title="…"></span>
         </h2>
-        <dl id="status-list" class="status-list">
-          <dt data-i18n="statusBackendLabel">backend</dt><dd id="status-backend">…</dd>
-          <dt data-i18n="statusNativeLabel">native index</dt><dd id="status-native">…</dd>
-          <dt data-i18n="statusToolsLabel">tools</dt><dd id="status-tools">…</dd>
+        <div id="mode-card" class="mode-card" hidden>
+          <span id="mode-badge" class="badge"></span>
+          <p id="mode-hint" class="mode-hint"></p>
+        </div>
+        <dl class="status-list">
+          <dt data-i18n="statusModel">Model</dt><dd id="status-backend">…</dd>
+          <dt data-i18n="statusEmbedder">Embeddings</dt><dd id="status-embedder">…</dd>
+          <dt data-i18n="statusIndex">Index</dt><dd id="status-native">…</dd>
+          <dt data-i18n="statusTools">Tools</dt><dd id="status-tools">…</dd>
         </dl>
       </section>
 
       <section class="panel">
-        <h2 data-i18n="kbTitle">Knowledge base</h2>
+        <h2><span data-i18n="kbTitle">Knowledge base</span><span id="kb-count" class="count-pill"></span></h2>
         <label id="file-input-label" class="dropzone" for="file-input">
-          <input id="file-input" type="file" accept=".txt,.md,.markdown" hidden />
-          <span data-i18n="kbDropzone">Drop a .txt/.md file or click to ingest</span>
+          <input id="file-input" type="file" accept=".txt,.md,.markdown,.rst" multiple hidden />
+          <span class="dropzone-icon" aria-hidden="true">⇪</span>
+          <span data-i18n="kbDropzone">Drop .txt or .md files</span>
         </label>
-        <div id="kb-status" class="muted"></div>
+        <ul id="kb-log" class="kb-log" aria-live="polite"></ul>
       </section>
 
       <section class="panel">
-        <h2 data-i18n="mediaTitle">Media tools</h2>
-        <label id="audio-input-label" class="dropzone small" for="audio-input">
-          <input id="audio-input" type="file" accept="audio/*" hidden />
-          <span data-i18n="mediaAudio">Transcribe audio</span>
-        </label>
-        <label id="video-input-label" class="dropzone small" for="video-input">
-          <input id="video-input" type="file" accept="video/*" hidden />
-          <span data-i18n="mediaVideo">Analyze video</span>
-        </label>
+        <h2 data-i18n="mediaTitle">Audio &amp; video</h2>
+        <div class="media-row">
+          <label id="audio-input-label" class="dropzone small" for="audio-input">
+            <input id="audio-input" type="file" accept="audio/*" hidden />
+            <span aria-hidden="true">♪</span> <span data-i18n="mediaAudio">Transcribe audio</span>
+          </label>
+          <label id="video-input-label" class="dropzone small" for="video-input">
+            <input id="video-input" type="file" accept="video/*" hidden />
+            <span aria-hidden="true">▶</span> <span data-i18n="mediaVideo">Analyze video</span>
+          </label>
+        </div>
       </section>
 
       <section class="panel contact-panel">
-        <h2 data-i18n="contactTitle">Contact</h2>
+        <h2 data-i18n="contactTitle">Author</h2>
         <div class="contact-block">
           <div class="contact-name">Sergeev Anton</div>
           <a class="contact-email" href="mailto:avsergeev1981@gmail.com">avsergeev1981@gmail.com</a>
@@ -83,16 +104,84 @@
       </section>
     </aside>
 
+    <!-- ── Centre: conversation ────────────────────────────────────── -->
     <main class="chat">
-      <div id="messages" class="messages"></div>
+      <header class="topbar">
+        <button class="icon-btn only-mobile" id="sidebar-open" type="button" data-i18n-aria="menuOpen" aria-label="Open menu">☰</button>
+        <div class="topbar-title only-mobile">Cognivore</div>
+        <span id="topbar-mode" class="badge subtle" hidden></span>
+        <span class="spacer"></span>
+        <button class="pill-btn only-narrow" id="cortex-open" type="button" aria-controls="cortex">
+          <span aria-hidden="true">◎</span> <span data-i18n="mapToggle">Map</span>
+        </button>
+      </header>
+
+      <div id="messages" class="messages" role="log" aria-live="polite">
+        <section id="hero" class="hero">
+          <h1 data-i18n="heroTitle">Ask — and see where the answer came from</h1>
+          <p class="hero-text" data-i18n="heroText"></p>
+          <div class="features">
+            <div class="feature"><span class="feature-icon f-map" aria-hidden="true"></span><div><b data-i18n="featureMap"></b><span data-i18n="featureMapText"></span></div></div>
+            <div class="feature"><span class="feature-icon f-ground" aria-hidden="true"></span><div><b data-i18n="featureGrounding"></b><span data-i18n="featureGroundingText"></span></div></div>
+            <div class="feature"><span class="feature-icon f-gaps" aria-hidden="true"></span><div><b data-i18n="featureGaps"></b><span data-i18n="featureGapsText"></span></div></div>
+          </div>
+          <div class="examples-label" data-i18n="tryAsking">Try asking</div>
+          <div id="examples" class="examples"></div>
+        </section>
+      </div>
+
       <form id="chat-form" class="composer">
-        <textarea id="chat-input" data-i18n-placeholder="chatPlaceholder" placeholder="Ask Cognivore anything…" rows="1"></textarea>
-        <button type="submit" data-i18n="chatSend">Send</button>
+        <div class="composer-box">
+          <textarea id="chat-input" data-i18n-placeholder="chatPlaceholder" placeholder="Ask…" rows="1" aria-describedby="chat-hint"></textarea>
+          <button type="submit" id="send-btn" class="send-btn" data-i18n-aria="chatSend" aria-label="Send">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h13M12 5l7 7-7 7" /></svg>
+          </button>
+        </div>
+        <div id="chat-hint" class="composer-hint" data-i18n="chatHint"></div>
       </form>
     </main>
+
+    <!-- ── Right: the knowledge cortex ─────────────────────────────── -->
+    <aside class="cortex" id="cortex" aria-labelledby="cortex-title">
+      <div class="cortex-head">
+        <h2 id="cortex-title"><span data-i18n="mapTitle">Knowledge map</span></h2>
+        <span id="map-stats" class="muted small"></span>
+        <span class="info" tabindex="0" data-i18n-title="mapMethod" title="">i</span>
+        <button class="icon-btn only-narrow" id="cortex-close" type="button" data-i18n-aria="close" aria-label="Close">✕</button>
+      </div>
+      <div class="map-wrap" id="map-wrap">
+        <canvas id="map-canvas" aria-hidden="true"></canvas>
+        <div id="map-empty" class="map-empty" data-i18n="mapEmpty" hidden></div>
+        <div id="map-tooltip" class="map-tooltip" hidden></div>
+      </div>
+      <div class="topics">
+        <div class="section-label" data-i18n="mapLegend">Topics</div>
+        <div id="topic-list" class="topic-list"></div>
+      </div>
+      <div class="gaps">
+        <div class="section-label"><span class="radar-dot" aria-hidden="true"></span><span data-i18n="gapsTitle">Gap radar</span></div>
+        <div id="gap-list" class="gap-list"></div>
+      </div>
+    </aside>
   </div>
+  <div id="scrim" class="scrim" hidden></div>
+
+  <dialog id="chunk-dialog" class="chunk-dialog">
+    <form method="dialog">
+      <header>
+        <div>
+          <div class="section-label" data-i18n="chunkTitle">Passage</div>
+          <div id="chunk-source" class="chunk-source"></div>
+        </div>
+        <button class="icon-btn" value="close" data-i18n-aria="close" aria-label="Close">✕</button>
+      </header>
+      <div id="chunk-text" class="chunk-text"></div>
+    </form>
+  </dialog>
+
   <script src="/i18n.js"></script>
   <script src="/theme.js"></script>
+  <script src="/cortex.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

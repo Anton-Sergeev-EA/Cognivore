@@ -34,8 +34,11 @@ function setTheme(theme) {
     /* ignore -- per-viewer convenience only */
   }
   document.querySelectorAll("#theme-switch [data-theme-btn]").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.themeBtn === theme);
+    const active = btn.dataset.themeBtn === theme;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-pressed", String(active));
   });
+  if (typeof window.onThemeChange === "function") window.onThemeChange(theme);
 }
 
 function initThemeSwitcher(container) {
@@ -46,8 +49,10 @@ function initThemeSwitcher(container) {
     btn.type = "button";
     btn.dataset.themeBtn = theme;
     btn.textContent = THEME_ICONS[theme];
-    btn.className = "theme-btn" + (theme === current ? " active" : "");
+    btn.className = "seg-btn" + (theme === current ? " active" : "");
+    btn.setAttribute("aria-pressed", String(theme === current));
     btn.title = typeof t === "function" ? t(THEME_LABEL_KEYS[theme]) : theme;
+    btn.setAttribute("aria-label", btn.title);
     btn.addEventListener("click", () => setTheme(theme));
     container.appendChild(btn);
   }

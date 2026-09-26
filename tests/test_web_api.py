@@ -142,7 +142,7 @@ def test_static_assets_are_not_cached(client: TestClient) -> None:
     # stayed invisible in an already-open browser, indistinguishable from
     # the deploy having silently failed. Every static response must tell
     # the browser not to do that.
-    for path in ("/", "/app.js", "/i18n.js", "/styles.css"):
+    for path in ("/", "/app.js", "/i18n.js", "/styles.css", "/cortex.js"):
         res = client.get(path)
         assert res.headers.get("cache-control") == "no-store", path
 
@@ -273,3 +273,9 @@ def test_oversized_upload_is_rejected(tmp_path: Path) -> None:
     big = b"a" * (1024 * 1024 + 1)
     res = client.post("/api/ingest/file", files={"file": ("big.md", big, "text/markdown")})
     assert res.status_code == 413
+
+
+def test_new_static_assets_are_served(client: TestClient) -> None:
+    res = client.get("/cortex.js")
+    assert res.status_code == 200
+    assert res.headers.get("cache-control") == "no-store"
