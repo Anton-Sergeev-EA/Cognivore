@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -144,3 +145,131 @@ def test_static_assets_are_not_cached(client: TestClient) -> None:
     for path in ("/", "/app.js", "/i18n.js", "/styles.css"):
         res = client.get(path)
         assert res.headers.get("cache-control") == "no-store", path
+
+
+# -- explainability endpoints (cognivore.ml) -------------------------------
+
+
+def _sse_events(body: str) -> dict[str, list[str]]:
+    """Parses an SSE stream the way a browser's EventSource does: several
+    ``data:`` lines of one event are joined with newlines."""
+    events: dict[str, list[str]] = {}
+    name: str | None = None
+    data: list[str] = []
+    for line in [*body.splitlines(), ""]:
+        if not line:
+            if name is not None:
+                events.setdefault(name, []).append("\n".join(data))
+            name, data = None, []
+        elif line.startswith("event:"):
+            name = line.split(":", 1)[1].strip()
+        elif line.startswith("data:"):
+            value = line[5:]
+            data.append(value[1:] if value.startswith(" ") else value)
+    return events
+
+
+@pytest.fixture
+def seeded_client(tmp_path: Path) -> TestClient:
+    settings = Settings(
+        data_dir=tmp_path / ".cognivore", prefer_semantic_embedder=False, seed_demo_kb=True
+    )
+    return TestClient(create_app(settings))
+
+
+def test_health_reports_demo_mode_and_embedder(client: TestClient) -> None:
+    body = client.get("/api/health").json()
+    assert body["demo_mode"] is True
+    assert body["embedder"].startswith("hashing")
+
+
+def test_seeded_store_includes_all_three_demo_languages(seeded_client: TestClient) -> None:
+    sources = {c["source"] for c in seeded_client.get("/api/knowledge_base").json()}
+    assert any("(EN)" in s for s in sources)
+    assert any("(RU)" in s for s in sources)
+    assert any("(ZH)" in s for s in sources)
+
+
+def test_knowledge_map_endpoint(seeded_client: TestClient) -> None:
+    body = seeded_client.get("/api/insights/map").json()
+    assert body["total_chunks"] == len(body["points"]) > 0
+    assert body["clusters"]
+    cluster_ids = {c["id"] for c in body["clusters"]}
+    assert all(p["cluster"] in cluster_ids for p in body["points"])
+    assert sum(c["size"] for c in body["clusters"]) == len(body["points"])
+
+
+def test_knowledge_map_of_an_empty_store(client: TestClient) -> None:
+    body = client.get("/api/insights/map").json()
+    assert body["points"] == [] and body["total_chunks"] == 0
+
+
+@pytest.mark.parametrize(
+    "question",
+    ["Какая политика возврата средств?", "退款政策是什么？", "What is the refund policy?"],
+)
+def test_stream_emits_an_insight_for_knowledge_questions(
+    seeded_client: TestClient, question: str
+) -> None:
+    with seeded_client.stream("GET", "/api/chat/stream", params={"message": question}) as res:
+        events = _sse_events(res.read().decode())
+    assert "answer_final" in events
+    insight = json.loads(events["insight"][0])
+    assert insight["used_knowledge_base"] is True
+    assert insight["hits"] and insight["hits"][0]["rank"] == 1
+    assert insight["query_point"] is not None
+    assert insight["grounding"] is not None
+    assert insight["gap"] is False
+    # Offsets must index into the exact final answer text.
+    answer = events["answer_final"][0]
+    for sentence in insight["grounding"]["sentences"]:
+        assert 0 <= sentence["start"] < sentence["end"] <= len(answer)
+
+
+def test_unanswerable_question_lands_on_the_gap_radar(seeded_client: TestClient) -> None:
+    question = "Do you support Kubernetes operators?"
+    with seeded_client.stream("GET", "/api/chat/stream", params={"message": question}) as res:
+        events = _sse_events(res.read().decode())
+    assert json.loads(events["insight"][0])["gap"] is True
+
+    gaps = seeded_client.get("/api/insights/gaps").json()
+    assert [g["query"] for g in gaps] == [question]
+    assert seeded_client.delete("/api/insights/gaps", params={"query": question}).status_code == 200
+    assert seeded_client.get("/api/insights/gaps").json() == []
+    assert seeded_client.delete("/api/insights/gaps", params={"query": question}).status_code == 404
+
+
+def test_chat_endpoint_includes_insight(seeded_client: TestClient) -> None:
+    body = seeded_client.post("/api/chat", json={"message": "What is the refund policy?"}).json()
+    assert body["insight"]["hits"]
+    arithmetic = seeded_client.post("/api/chat", json={"message": "What is 6 * 7?"}).json()
+    assert arithmetic["answer"].strip() == "42"
+    assert arithmetic["insight"]["used_knowledge_base"] is False
+    assert arithmetic["insight"]["grounding"] is None
+
+
+def test_ingest_text_takes_a_json_body(client: TestClient) -> None:
+    res = client.post(
+        "/api/ingest/text", json={"source": "k8s.md", "text": "We ship a Helm chart."}
+    )
+    assert res.status_code == 200
+    assert res.json()["chunks_added"] == 1
+    assert client.post("/api/ingest/text", json={"source": "x", "text": "  "}).status_code == 400
+
+
+def test_single_chunk_endpoint(client: TestClient) -> None:
+    client.post("/api/ingest/text", json={"source": "a.md", "text": "Alpha beta gamma."})
+    chunk_id = client.get("/api/knowledge_base").json()[0]["id"]
+    body = client.get(f"/api/knowledge_base/{chunk_id}").json()
+    assert body["source"] == "a.md"
+    assert client.get("/api/knowledge_base/999999").status_code == 404
+
+
+def test_oversized_upload_is_rejected(tmp_path: Path) -> None:
+    settings = Settings(
+        data_dir=tmp_path / ".cognivore", prefer_semantic_embedder=False, max_document_upload_mb=1
+    )
+    client = TestClient(create_app(settings))
+    big = b"a" * (1024 * 1024 + 1)
+    res = client.post("/api/ingest/file", files={"file": ("big.md", big, "text/markdown")})
+    assert res.status_code == 413

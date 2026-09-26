@@ -70,11 +70,14 @@ RUN WHEEL="$(ls /tmp/*.whl)" \
 # docker-compose.yml for the LLM: without this, the cache would live under
 # the container's throwaway home directory, and the ~75MB-1GB Whisper
 # model would be re-downloaded from Hugging Face on every rebuild/recreate
-# instead of once.
+# instead of once. FASTEMBED_CACHE_PATH does the same for the multilingual
+# text-embedding model (~220MB), which fastembed would otherwise keep in
+# /tmp and fetch again after every container recreate.
 ENV COGNIVORE_HOST=0.0.0.0 \
     COGNIVORE_PORT=8420 \
     COGNIVORE_DATA_DIR=/data \
-    HF_HOME=/data/hf-cache
+    HF_HOME=/data/hf-cache \
+    FASTEMBED_CACHE_PATH=/data/fastembed-cache
 
 # Run as an unprivileged user rather than root -- this is a network-facing
 # service (even if usually only reachable on localhost/a private compose
