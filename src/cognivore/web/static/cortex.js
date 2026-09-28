@@ -9,6 +9,8 @@
 
 const Cortex = (() => {
   const PAD = 30;
+  // Topic names drawn on the map itself; the list under the map has them all.
+  const MAX_TOPIC_LABELS = 6;
   const reducedMotion =
     typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -244,29 +246,40 @@ const Cortex = (() => {
       }
     });
 
-    // Topic labels (on top of points so they stay readable). Each label is
-    // kept inside the canvas and nudged vertically until it no longer
-    // overlaps a label placed before it (largest topics are placed first).
+    // Topic labels (on top of points so they stay readable), largest topics
+    // first. Each label tries a few slots alternately above and below its
+    // topic and takes the first one that stays inside the canvas and clear
+    // of labels already placed; with no free slot it is left out -- the
+    // topic list under the map always names every topic.
     ctx.font = "600 11px Inter, system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     const placed = [];
+    const queryLabel = query && labelQuery ? queryLabelBox(w, h) : null;
+    if (queryLabel) placed.push(queryLabel);
     const ordered = [...data.clusters].sort((a, b) => b.size - a.size);
+    ctx.font = "600 11px Inter, system-ui, sans-serif";
     for (const c of ordered) {
       if (!c.keywords.length) continue;
+      if (placed.length >= MAX_TOPIC_LABELS + (queryLabel ? 1 : 0)) break;
       const label = c.keywords.slice(0, 2).join(" · ");
       const tw = ctx.measureText(label).width + 12;
       const [cx0, cy] = toPx(c.x, c.y);
       const cx = Math.max(tw / 2 + 4, Math.min(w - tw / 2 - 4, cx0));
-      let y = Math.max(13, Math.min(h - 13, cy - spreads.get(c.id) * s * 0.55));
-      for (let attempt = 0; attempt < 8; attempt++) {
-        const clash = placed.find(
-          (r) => Math.abs(r.x - cx) < (r.w + tw) / 2 + 4 && Math.abs(r.y - y) < 20
+      const base = cy - spreads.get(c.id) * s * 0.55;
+      let y = null;
+      for (const offset of [0, -22, 22, -44, 44, -66, 66]) {
+        const candidate = base + offset;
+        if (candidate < 13 || candidate > h - 13) continue;
+        const clash = placed.some(
+          (r) => Math.abs(r.x - cx) < (r.w + tw) / 2 + 4 && Math.abs(r.y - candidate) < 20
         );
-        if (!clash) break;
-        y = clash.y + (y >= clash.y ? 21 : -21);
-        y = Math.max(13, Math.min(h - 13, y));
+        if (!clash) {
+          y = candidate;
+          break;
+        }
       }
+      if (y === null) continue;
       placed.push({ x: cx, y, w: tw });
       const dim = focusCluster !== null && focusCluster !== c.id;
       ctx.globalAlpha = dim ? 0.3 : 0.92;
@@ -299,16 +312,13 @@ const Cortex = (() => {
       ctx.closePath();
       ctx.fill();
       if (labelQuery) {
-        ctx.font = "700 11px Inter, system-ui, sans-serif";
-        ctx.textAlign = "center";
-        const tw = ctx.measureText(labelQuery).width + 12;
-        const lx = Math.max(tw / 2 + 4, Math.min(w - tw / 2 - 4, qx));
-        const ly = qy + 22 > h - 12 ? qy - 22 : qy + 22;
+        const box = queryLabelBox(w, h);
         ctx.fillStyle = colors.query;
-        roundRect(lx - tw / 2, ly - 9, tw, 18, 9);
+        roundRect(box.x - box.w / 2, box.y - 9, box.w, 18, 9);
         ctx.fill();
         ctx.fillStyle = "#231500";
-        ctx.fillText(labelQuery, lx, ly + 0.5);
+        ctx.textAlign = "center";
+        ctx.fillText(labelQuery, box.x, box.y + 0.5);
       }
     }
 
@@ -316,6 +326,19 @@ const Cortex = (() => {
     if (!idle && (animating || data.points.length)) {
       rafId = requestAnimationFrame(draw);
     }
+  }
+
+  // Where the "your question" label goes; topic labels are laid out around
+  // it so the two never overlap.
+  function queryLabelBox(w, h) {
+    const [qx, qy] = toPx(query.x, query.y);
+    ctx.font = "700 11px Inter, system-ui, sans-serif";
+    const tw = ctx.measureText(labelQuery).width + 12;
+    return {
+      x: Math.max(tw / 2 + 4, Math.min(w - tw / 2 - 4, qx)),
+      y: qy + 22 > h - 12 ? qy - 22 : qy + 22,
+      w: tw,
+    };
   }
 
   function roundRect(x, y, w, h, r) {

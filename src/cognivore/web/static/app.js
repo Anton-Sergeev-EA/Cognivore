@@ -26,6 +26,29 @@ function el(tag, className, text) {
   return node;
 }
 
+// Text the app generates at runtime (status lines, placeholders, errors)
+// remembers its translation key, so a language switch can re-translate it
+// in place instead of leaving it in the previous language. A `chunks`
+// parameter is itself translated (plural-aware) into `added`.
+function i18nParams(params) {
+  const out = { ...params };
+  if (out.chunks !== undefined) out.added = t("kbChunks", { count: out.chunks });
+  return out;
+}
+
+function setI18nText(node, key, params = {}) {
+  node.dataset.i18nKey = key;
+  node.dataset.i18nParams = JSON.stringify(params);
+  node.textContent = t(key, i18nParams(params));
+  return node;
+}
+
+function refreshDynamicText() {
+  document.querySelectorAll("[data-i18n-key]").forEach((node) => {
+    node.textContent = t(node.dataset.i18nKey, i18nParams(JSON.parse(node.dataset.i18nParams || "{}")));
+  });
+}
+
 function scrollToBottom() {
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
@@ -178,7 +201,11 @@ async function openChunk(id) {
 // ── Hero / examples ────────────────────────────────────────────────────
 
 function renderExamples() {
+  // The onboarding screen (and its example list) is removed after the first
+  // question; a language switch after that must not throw here, or every
+  // later re-render in onLanguageChange is skipped.
   const box = $("examples");
+  if (!box) return;
   box.replaceChildren();
   for (const example of t("examples")) {
     const chip = el("button", "example-chip", example);
@@ -206,7 +233,7 @@ function newTurn() {
   const answer = el("div", "answer");
   const thinking = el("div", "thinking");
   thinking.innerHTML = '<span class="thinking-dots"><span></span><span></span><span></span></span>';
-  thinking.appendChild(el("span", "", t("thinking")));
+  thinking.appendChild(setI18nText(el("span"), "thinking"));
   answer.appendChild(thinking);
   turnEl.append(trace, answer);
   messagesEl.appendChild(turnEl);
@@ -233,6 +260,7 @@ function addTraceStep(turn, step) {
     line.append(short, full);
     if (observation.length > 160) {
       line.classList.add("expandable");
+      line.dataset.i18nTitle = "traceShowFull"; // re-translated by applyStaticTranslations
       line.title = t("traceShowFull");
       line.addEventListener("click", () => line.classList.toggle("expanded"));
     }
@@ -265,7 +293,13 @@ function renderAnswerText(turn) {
   for (const s of grounding.sentences) {
     if (s.start > cursor) textEl.append(turn.text.slice(cursor, s.start));
     const span = el("span", "", turn.text.slice(s.start, s.end));
-    if (s.support < 0.35) {
+    if (s.citation) {
+      // "This comes from <source>": not a claim, so it's shown quietly --
+      // the source cards below already say where the answer came from.
+      span.className = "s-cite";
+      span.dataset.rank = String(s.source_rank);
+      span.title = t("strongSentence", { rank: s.source_rank });
+    } else if (s.support < 0.35) {
       span.className = "s-weak";
       span.title = t("weakSentence");
     } else if (s.source_rank) {
@@ -398,7 +432,7 @@ function sendMessage(text) {
     source.close();
     const textEl = ensureTextEl(turn);
     if (!turn.text) {
-      textEl.textContent = t("chatConnectionError");
+      setI18nText(textEl, "chatConnectionError");
       textEl.classList.add("error");
     }
     setBusy(false);
@@ -429,9 +463,9 @@ inputEl.addEventListener("input", autosize);
 
 // ── Ingestion & media ──────────────────────────────────────────────────
 
-function logKb(text, cls) {
+function logKb(key, params, cls) {
   const log = $("kb-log");
-  const item = el("li", cls || "", text);
+  const item = setI18nText(el("li", cls || ""), key, params);
   log.prepend(item);
   while (log.children.length > 4) log.lastElementChild.remove();
   return item;
@@ -439,17 +473,17 @@ function logKb(text, cls) {
 
 async function ingestFiles(files) {
   for (const file of files) {
-    const item = logKb(t("kbIngesting", { file: file.name }));
+    const item = logKb("kbIngesting", { file: file.name });
     const form = new FormData();
     form.append("file", file);
     try {
       const res = await fetch("/api/ingest/file", { method: "POST", body: form });
       if (!res.ok) throw new Error(String(res.status));
       const data = await res.json();
-      item.textContent = t("kbIngested", { file: file.name, added: t("kbChunks", { count: data.chunks_added }) });
+      setI18nText(item, "kbIngested", { file: file.name, chunks: data.chunks_added });
       item.className = "ok";
     } catch (err) {
-      item.textContent = t("kbIngestFailed", { file: file.name });
+      setI18nText(item, "kbIngestFailed", { file: file.name });
       item.className = "err";
     }
   }
@@ -460,19 +494,22 @@ async function ingestFiles(files) {
 async function processMedia(file, endpoint, resultKey) {
   hideHero();
   const key = resultKey === "transcript" ? "mediaUploadedAudio" : "mediaUploadedVideo";
-  messagesEl.appendChild(el("div", "msg user", t(key, { file: file.name })));
+  messagesEl.appendChild(setI18nText(el("div", "msg user"), key, { file: file.name }));
   const turn = newTurn();
   const form = new FormData();
   form.append("file", file);
   try {
     const res = await fetch(endpoint, { method: "POST", body: form });
     const data = await res.json();
-    turn.text = data[resultKey] || data.detail || t("mediaNoResult");
+    turn.text = data[resultKey] || data.detail || "";
+    const textEl = ensureTextEl(turn);
+    if (turn.text) textEl.textContent = turn.text;
+    else setI18nText(textEl, "mediaNoResult");
   } catch (err) {
-    turn.text = t("mediaProcessingFailed");
-    ensureTextEl(turn).classList.add("error");
+    const textEl = ensureTextEl(turn);
+    setI18nText(textEl, "mediaProcessingFailed");
+    textEl.classList.add("error");
   }
-  ensureTextEl(turn).textContent = turn.text;
   scrollToBottom();
 }
 
@@ -528,15 +565,29 @@ document.addEventListener("keydown", (event) => {
 // ── Language / theme changes ───────────────────────────────────────────
 
 window.onLanguageChange = () => {
-  renderStatus();
-  renderExamples();
-  renderTopics();
-  renderGaps();
-  initThemeSwitcher($("theme-switch"));
-  Cortex.setQueryLabel(t("mapQuery"));
-  for (const turn of state.turns) {
-    if (turn.traceCount) renderTraceSummary(turn);
-    if (turn.insight) renderInsight(turn);
+  // Each re-render is isolated: one failing part must never leave the rest
+  // of the interface in the previous language.
+  const steps = [
+    renderStatus,
+    renderExamples,
+    renderTopics,
+    renderGaps,
+    refreshDynamicText,
+    () => initThemeSwitcher($("theme-switch")),
+    () => Cortex.setQueryLabel(t("mapQuery")),
+    () => {
+      for (const turn of state.turns) {
+        if (turn.traceCount) renderTraceSummary(turn);
+        if (turn.insight) renderInsight(turn);
+      }
+    },
+  ];
+  for (const step of steps) {
+    try {
+      step();
+    } catch (err) {
+      console.error("Re-render after language change failed:", err);
+    }
   }
 };
 window.onThemeChange = () => {

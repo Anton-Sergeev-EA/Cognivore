@@ -39,6 +39,29 @@ project uses [Semantic Versioning](https://semver.org/).
 - Offline demo mode understands plain questions in any UI language (not
   only English keywords) and percentages in all of them ("15% от 4900",
   "15 % von 149", "999 的 15%", "149 का 15%", ...).
+- Auto-context: before each turn the knowledge base is searched and the
+  passages close to the best match are handed to the model with the
+  instruction to answer only from them -- small local models (qwen2.5:3b)
+  otherwise often answered without ever calling the search tool. The
+  lookup shows up as a normal search step, so sources and grounding are
+  always shown (`COGNIVORE_AUTO_CONTEXT`,
+  `COGNIVORE_AUTO_CONTEXT_THRESHOLD`, `COGNIVORE_AUTO_CONTEXT_RELATIVE_SCORE`).
+- Questions the knowledge base can't answer are handled end to end: the
+  model is told the knowledge base was searched and has nothing on it (so
+  it neither guesses nor sends the user to search the internet), the
+  search tool reports "nothing found" instead of the least-unrelated
+  passages, the question lands on the gap radar, and the UI shows no
+  made-up sources or grounding for it. Arithmetic and small talk are not
+  treated as knowledge questions (`cognivore.ml.intent`). By default
+  (`COGNIVORE_STRICT_KNOWLEDGE_ANSWERS=true`) such a question is answered
+  "the knowledge base has no information about this" directly, in the
+  question's language, without calling the model -- a 3B model told
+  exactly that still answered with its own meta-reasoning about half the
+  time.
+- Citation sentences ("This is from <source>") are shown muted instead of
+  as part of the answer's claims.
+- The answer language is named explicitly in the prompt; language
+  detection now also tells Spanish, French, German and Italian apart.
 - Upload size limits (`COGNIVORE_MAX_DOCUMENT_UPLOAD_MB`,
   `COGNIVORE_MAX_MEDIA_UPLOAD_MB`); oversized uploads get HTTP 413 instead
   of being buffered in memory.
@@ -60,6 +83,24 @@ project uses [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- `build_agent` treated an *empty* knowledge base as missing (an empty
+  store is falsy) and gave the agent a separate store, so documents
+  uploaded to a fresh install were never found in chat.
+- Overlapping neighbour chunks no longer show up as duplicate sources, in
+  the UI and in what the model reads.
+- Switching the UI language after the first question left part of the
+  interface in the previous language; runtime-generated texts (status
+  lines, errors, upload log) are now re-translated too.
+- A final answer written as a tool call ("Action: Final Answer" +
+  "Action Input: ...", a common slip of small models) was dispatched as
+  an unknown tool, and the model then relayed the error message to the
+  user; it is now parsed as the final answer.
+- A sentence that only attributes the answer to a source ("This is from
+  the Skylark Cloud knowledge base.") was underlined as an unsupported
+  claim; it is now recognised as a citation, and the model is asked not
+  to name sources at all since the UI shows them.
+- Knowledge-map topic labels no longer pile up or cover the question
+  label; the map asks for at least three topics on larger knowledge bases.
 - Hindi tokenization: Devanagari vowel signs are combining marks, not
   "word" characters, so words fell apart into bare consonants; the danda
   (।) is now also a sentence terminator.
