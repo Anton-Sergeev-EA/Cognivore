@@ -47,9 +47,10 @@ using classic, inspectable ML (NumPy only -- see
 | | What you see | How it works |
 |---|---|---|
 | **Knowledge map** | Every chunk of your knowledge base as a star on a map, grouped into named topics. Ask a question and it lands on the map, with beams to the passages that answered it. | PCA of the chunk embeddings to 2-D; topics by k-means++ with the number of topics picked by silhouette score; topic names by class-based TF-IDF. Rebuilt only when the knowledge base changes. |
-| **Answer check** | A grounding meter under every answer; sentences the sources don't support get a wavy underline, hovering a source highlights the sentences it backs. | Each sentence is scored against each retrieved passage (60% keyword overlap + 40% embedding similarity); the answer's score is the length-weighted mean. |
+| **Answer check** | A grounding meter under every answer; sentences the sources don't support get a wavy underline, hovering a source highlights the sentences it backs; a sentence that only names a source is shown muted. | Each sentence is scored against each retrieved passage (60% keyword overlap + 40% embedding similarity); the answer's score is the length-weighted mean. |
 | **Retrieval X-ray** | Each source shows how much of its score came from *meaning* vs *exact words*, and how confident retrieval was overall. | The hybrid store's vector and BM25 components, plus a coverage measure that handles Chinese without a word segmenter. |
 | **Gap radar** | Questions your documents couldn't answer, merged across rephrasings and ranked by how often they were asked -- a to-do list for your knowledge base. | Retrieval confidence below a threshold; near-duplicate questions merged by token Jaccard similarity; persisted next to the store. |
+| **Honest "I don't know"** | A question your documents don't cover gets a plain "the knowledge base has no information about this" in the question's language -- no guess, no made-up sources. | The knowledge base is searched before every answer; below the confidence threshold Cognivore answers itself instead of the model (`COGNIVORE_STRICT_KNOWLEDGE_ANSWERS`). |
 
 The web UI is fully localized into **Russian (default), English,
 Simplified Chinese, Spanish, Hindi, French, German, Japanese and Italian**
@@ -80,6 +81,12 @@ dependencies are missing) are implemented rather than imported.
   *any* instruction-tuned local model, not just ones fine-tuned for a
   specific function-calling wire format -- see
   [docs/architecture.md](docs/architecture.md#why-a-react-loop-instead-of-native-function-calling).
+- **Retrieval before every answer** (auto-context): small local models
+  often skip the search tool and guess, so the knowledge base is searched
+  up front and only passages close to the best match are handed to the
+  model, with rules to keep every number and condition and not to blend
+  topics. The answer language is named explicitly, and a slip such as
+  "Action: Final Answer" is still understood as the final answer.
 - **Native C++ vector index** (`native/vector_index.cpp`): an exact
   `FlatIndex` (AVX2/FMA dot product, OpenMP-parallel scan) and an
   approximate `NSWIndex` (a from-scratch single-layer Navigable Small World
@@ -153,6 +160,11 @@ GGUF path or `FakeLLMBackend`:
 ollama pull qwen2.5:3b   # any instruction-tuned model works
 cognivore chat           # picks up the running Ollama server automatically
 ```
+
+With several models pulled, `auto` uses the first one Ollama lists; pin
+the one you want with `COGNIVORE_OLLAMA_MODEL=qwen2.5:3b` (in `.env` or
+on the command line). "Thinking" models that emit long reasoning before
+answering (e.g. `openthinker`) fit the agent's step format poorly.
 
 Audio/video tools need their own extras: `pip install -e ".[audio,video]"`
 (or `.[all]` for everything, GGUF included). See `.env.example` for every
@@ -400,14 +412,19 @@ and this README isn't going to pretend it is.
 
 ```bash
 pip install -e ".[dev]"
-pytest --cov                 # 157 tests: calculator safety, chunking,
+pytest --cov                 # 192 tests: calculator safety, chunking,
                               # native-vs-Python index parity, NSW recall,
                               # agent loop, RAG store, FastAPI endpoints,
                               # PCA/k-means/silhouette, grounding, gaps,
-                              # CJK tokenization, snippets
+                              # CJK tokenization, snippets, auto-context,
+                              # all nine UI languages end to end
 ruff check . && ruff format --check .
 mypy -p cognivore
 ```
+
+The suite is hermetic: it runs from an empty directory with `COGNIVORE_*`
+variables cleared and the offline backend and embedder, so neither your
+`.env` nor a locally running Ollama affects it (`tests/conftest.py`).
 
 Every check above is what CI runs (`.github/workflows/ci.yml`), across
 Ubuntu/macOS/Windows and Python 3.10-3.12; native-extension-only tests skip
@@ -435,7 +452,7 @@ src/cognivore/
   cli.py            cognivore chat|ingest|serve|bench
 benchmarks/         standalone scripts for the numbers above
 examples/           minimal library-usage scripts
-tests/              pytest suite (157 tests)
+tests/              pytest suite (192 tests)
 ```
 
 ## License

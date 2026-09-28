@@ -93,6 +93,34 @@ flowchart TB
     FLAT -.fallback.-> PYFALLBACK
 ```
 
+## Retrieval before every answer (auto-context)
+
+Leaving retrieval entirely to the model -- it calls `search_knowledge_base`
+when it decides to -- works with larger models, but live testing with a
+3B model showed it frequently skipped the search and answered from its
+own guesses. So `Agent._prepare` (`cognivore/agent/core.py`) asks a
+*context provider* (`bootstrap.build_context_provider`) first:
+
+- **Relevant passages found** (retrieval confidence >=
+  `auto_context_threshold`): only passages scoring at least
+  `auto_context_relative_score` x the best one are put in front of the
+  model, with explicit rules -- keep every number and condition, use only
+  passages about the question, never blend topics, don't cite sources.
+  Without the relative cut, a refund question also pulled in an SLA
+  section ("100% refund per month") and the model merged the two.
+- **Nothing relevant, and the message is a knowledge question**
+  (`cognivore.ml.intent`: a question with content words and no
+  arithmetic): with `strict_knowledge_answers` (default) Cognivore answers
+  "the knowledge base has no information about this" in the question's
+  language without calling the model; otherwise the model is told the
+  knowledge base has nothing on it.
+- **Anything else** (arithmetic, small talk): no lookup is injected.
+
+The lookup is recorded as an ordinary `search_knowledge_base` trace step,
+so the UI trace and the explainability layer treat it like any tool call.
+The prompt also names the answer language explicitly, and the parser
+accepts "Action: Final Answer" as a final answer.
+
 ## The explainability layer (`cognivore.ml`)
 
 After every turn the web layer builds a `TurnInsight`
@@ -121,7 +149,8 @@ insight.
   alphabetic scripts and in characters for CJK (where boundary-spanning
   bigrams are noise). Questions below `gap_threshold` that actually used
   the knowledge base are recorded, merged by token Jaccard similarity, and
-  persisted to `gaps.json`.
+  persisted to `gaps.json`. A gap carries no sources or grounding: the
+  closest chunks are unrelated, and showing them as evidence would mislead.
 
 These are deliberately classic, inspectable techniques rather than an
 extra model call: they are deterministic, run in milliseconds on a CPU,

@@ -45,6 +45,7 @@ backoff. 15% of that is 750ms.
 | **答案核查** | 每个答案下方都有依据充分度指示；来源不支持的句子会加波浪下划线，悬停某个来源时会高亮它所支持的句子。 | 每句话与每个检索片段比对（60% 关键词重合 + 40% 向量相似度）；答案得分为按句子长度加权的平均值。 |
 | **检索透视** | 每个来源都显示其得分中有多少来自*语义*、多少来自*词语精确匹配*，以及整体检索置信度。 | 混合检索中的向量与 BM25 分量，外加一个无需分词词典也能正确处理中文的问题覆盖度指标。 |
 | **知识缺口雷达** | 文档无法回答的问题，按不同说法合并、按提问频率排序——一份现成的知识库补充清单。 | 检索置信度低于阈值即记录；相似问题按 Jaccard 系数合并；列表与知识库一同保存。 |
+| **诚实的“不知道”** | 对文档中没有的问题，直接用提问的语言回答“知识库中没有这方面的信息”——不猜测，也不编造来源。 | 每次回答前都会检索知识库；置信度低于阈值时由 Cognivore 直接回答，而不是交给模型（`COGNIVORE_STRICT_KNOWLEDGE_ANSWERS`）。 |
 
 界面已完整本地化为**俄语（默认）、英语、简体中文、西班牙语、印地语、法语、德语、日语和意大利语**（包括复数形式和数字格式，初始语言按浏览器语言选择），
 检索本身也支持多语言（感知中日韩文字的分词和多语言向量模型）：中文问题能像英文
@@ -66,6 +67,10 @@ backoff. 15% of that is 750ms.
 
 ## 功能特性
 
+- **每次回答前先检索**（auto-context）：小型本地模型经常跳过检索直接猜测，
+  因此会预先检索知识库，只把与最佳结果接近的片段交给模型，并要求保留所有数字和
+  条件、不混合不同主题。回答语言会被明确指定；即使模型写成“Action: Final Answer”
+  这样的错误格式，也会被正确识别为最终答案。
 - **ReAct 智能体循环**（Thought → Action → Observation），可与*任意*经
   过指令微调的本地模型配合使用，而不仅限于针对特定 function-calling 传
   输格式微调过的模型 —— 详见
@@ -133,6 +138,10 @@ cognivore chat
 ollama pull qwen2.5:3b   # 任何经过指令微调的模型都可以用
 cognivore chat           # 会自动识别正在运行的 Ollama 服务器
 ```
+
+如果拉取了多个模型，`auto` 会使用 Ollama 列出的第一个；可通过
+`COGNIVORE_OLLAMA_MODEL=qwen2.5:3b`（写入 `.env` 或在命令行中设置）固定所用模型。
+回答前会输出大段推理过程的“思考型”模型（例如 `openthinker`）与智能体的步骤格式配合不佳。
 
 音频/视频工具需要单独的 extras：`pip install -e ".[audio,video]"`（或
 使用 `.[all]` 安装全部内容，包括 GGUF）。所有配置项详见 `.env.example`。
@@ -352,14 +361,18 @@ NSW 图在每一步上的开销（堆操作、跨图的随机内存访问、已�
 
 ```bash
 pip install -e ".[dev]"
-pytest --cov                 # 157 个测试：计算器安全性、分块（chunking），
+pytest --cov                 # 192 个测试：计算器安全性、分块（chunking），
                               # 原生索引与 Python 索引的一致性、NSW recall，
                               # 智能体循环、RAG 存储、FastAPI 端点，
                               # PCA/k-means/轮廓系数、依据核查、知识缺口、
-                              # 中文分词、片段摘要
+                              # 中文分词、片段摘要、auto-context、
+                              # 全部 9 种界面语言的端到端测试
 ruff check . && ruff format --check .
 mypy -p cognivore
 ```
+
+测试是隔离的：从空目录运行，清除所有 `COGNIVORE_*` 变量，并使用离线模型与离线向量器，
+因此您的 `.env` 和本地运行的 Ollama 都不会影响测试结果（`tests/conftest.py`）。
 
 以上每一项检查正是 CI（`.github/workflows/ci.yml`）在
 Ubuntu/macOS/Windows 与 Python 3.10-3.12 上运行的内容；在矩阵中没有
@@ -386,7 +399,7 @@ src/cognivore/
   cli.py            cognivore chat|ingest|serve|bench
 benchmarks/         standalone scripts for the numbers above
 examples/           minimal library-usage scripts
-tests/              pytest suite (157 tests)
+tests/              pytest suite (192 tests)
 ```
 
 ## 许可证

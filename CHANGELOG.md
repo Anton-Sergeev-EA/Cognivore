@@ -80,6 +80,11 @@ project uses [Semantic Versioning](https://semver.org/).
 - `POST /api/ingest/text` takes a JSON body (`{"source", "text"}`) instead
   of query parameters, so long documents no longer hit URL length limits.
 - The Docker image persists the fastembed model cache in `/data`.
+- Minimum `sse-starlette` is now 3.0: older releases bind their shutdown
+  event to the first event loop, which broke chat streaming whenever the
+  app ran on more than one loop in a process (e.g. in the test suite).
+  Minimum `pytest-asyncio` (dev extra) is now 0.23.5, the first release
+  that works with pytest 8.1.
 
 ### Fixed
 
@@ -99,6 +104,9 @@ project uses [Semantic Versioning](https://semver.org/).
   the Skylark Cloud knowledge base.") was underlined as an unsupported
   claim; it is now recognised as a citation, and the model is asked not
   to name sources at all since the UI shows them.
+- The test suite read the developer's `.env` and, with the default `auto`
+  provider, used a locally running Ollama -- turning a seconds-long run
+  into tens of minutes of real model calls; it is now hermetic.
 - Knowledge-map topic labels no longer pile up or cover the question
   label; the map asks for at least three topics on larger knowledge bases.
 - Hindi tokenization: Devanagari vowel signs are combining marks, not
