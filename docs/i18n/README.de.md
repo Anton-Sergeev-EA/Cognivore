@@ -12,6 +12,8 @@ alles läuft auf einem reinen CPU-Laptop, nichts muss Ihren Rechner verlassen.
 
 🌐 **Lies dies in einer anderen Sprache:** [English](../../README.md) | [Русский](README.ru.md) | [Deutsch](README.de.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [Español](README.es.md) | [中文](README.zh.md) | [日本語](README.ja.md) | [हिन्दी](README.hi.md)
 
+> **Hinweis:** Diese Übersetzung beschreibt Version 0.1. Neu in 0.2: eine Wissenskarte, eine satzweise Prüfung der Antworten und ein Wissenslücken-Radar – siehe [English README](../../README.md#what-makes-it-different); Screenshots und UI-Beschreibung unten sind veraltet.
+
 Cognivore ist ein Agenten-Framework im ReAct-Stil mit retrieval-augmented
 generation und Unterstützung für multimodale Werkzeuge (Audio-Transkription,
 Video-Szenenanalyse), das gezielt so gebaut wurde, dass es vollständig auf

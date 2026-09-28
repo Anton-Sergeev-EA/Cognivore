@@ -13,6 +13,13 @@ flowchart TB
         REST["/api/chat, /api/ingest/*"]
         SSE["/api/chat/stream (SSE)"]
         MEDIA["/api/media/audio, /api/media/video"]
+        INSIGHTS["/api/insights/map, /api/insights/gaps"]
+    end
+
+    subgraph ML["cognivore.ml (NumPy only)"]
+        KMAP["KnowledgeMap\nPCA · k-means++ · silhouette · c-TF-IDF"]
+        GROUND["Grounding\nper-sentence support"]
+        GAPS["KnowledgeGapTracker\nretrieval confidence"]
     end
 
     subgraph AGENT["cognivore.agent"]
@@ -34,7 +41,8 @@ flowchart TB
 
     subgraph RAG["cognivore.rag"]
         CHUNK["chunking\n(recursive splitter)"]
-        EMB["embeddings\n(fastembed / hashing trick)"]
+        TOK["tokenize\n(CJK bigrams)"]
+        EMB["embeddings\n(multilingual fastembed / hashing trick)"]
         STORE["DocumentStore\n(vector + BM25 hybrid)"]
     end
 
@@ -66,7 +74,15 @@ flowchart TB
 
     RAGT --> STORE
     STORE --> CHUNK
+    STORE --> TOK
     STORE --> EMB
+    SSE --> ML
+    REST --> ML
+    INSIGHTS --> KMAP
+    INSIGHTS --> GAPS
+    KMAP --> STORE
+    GROUND --> EMB
+    GAPS --> STORE
     STORE --> FLAT
     STORE --> NSW
     MEM --> FLAT
@@ -76,6 +92,41 @@ flowchart TB
     NSW --> CPP
     FLAT -.fallback.-> PYFALLBACK
 ```
+
+## The explainability layer (`cognivore.ml`)
+
+After every turn the web layer builds a `TurnInsight`
+(`cognivore/ml/insight.py`) and streams it as a final `insight` SSE event,
+*after* the answer itself has finished streaming, so it never delays the
+answer. Any failure there is logged and the turn simply ships without an
+insight.
+
+- **Knowledge map** (`knowledge_map.py`): the store keeps every chunk's
+  embedding (persisted as `vectors.npy` next to the index). The map
+  L2-normalizes them, projects to 2-D with PCA (`projection.py`, covariance
+  eigendecomposition with deterministic component signs), clusters with
+  k-means++ for every k in 2..8 and keeps the k with the best silhouette
+  score (`clustering.py`), and names each cluster by class-based TF-IDF
+  (`topics.py`). It is cached per `DocumentStore.version`, so it is only
+  recomputed after an ingest; stores larger than `map_max_points` are
+  mapped from a deterministic sample.
+- **Grounding** (`grounding.py`): the answer is split into sentences with
+  character offsets; each sentence is scored against each retrieved
+  passage as 0.6 x keyword recall + 0.4 x embedding cosine. The UI uses the
+  offsets to underline weakly supported sentences in place.
+- **Retrieval confidence and gaps** (`insight.py`, `gaps.py`): relative
+  BM25 scores are useless as an absolute signal (the best hit is always
+  1.0), so confidence is 0.5 x best cosine + 0.5 x *coverage* -- the share
+  of the question's content found in the passage, measured in words for
+  alphabetic scripts and in characters for CJK (where boundary-spanning
+  bigrams are noise). Questions below `gap_threshold` that actually used
+  the knowledge base are recorded, merged by token Jaccard similarity, and
+  persisted to `gaps.json`.
+
+These are deliberately classic, inspectable techniques rather than an
+extra model call: they are deterministic, run in milliseconds on a CPU,
+cost no tokens, and every number the UI shows can be traced back to a
+formula in a few dozen lines of NumPy.
 
 ## Why a ReAct loop instead of native function calling
 

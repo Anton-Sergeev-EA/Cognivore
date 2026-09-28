@@ -1,8 +1,15 @@
 # Cognivore
 
-**A local-first, torch-free multimodal agent framework.** LLM reasoning +
-RAG, with a hand-written C++ vector index and a web chat UI -- everything
-runs on a CPU-only laptop, nothing is required to leave your machine.
+**Explainable, local-first AI over your own documents.** Every answer
+comes with its evidence: a live **knowledge map** shows exactly which
+passages it was drawn from, every **sentence is checked** against those
+sources, and questions your documents can't answer land on a **gap
+radar**. Underneath is a torch-free multimodal agent framework -- LLM
+reasoning + RAG with a hand-written C++ vector index -- that runs on a
+CPU-only laptop; nothing is required to leave your machine.
+
+Interface in 9 languages: **Russian, English, Chinese, Spanish, Hindi,
+French, German, Japanese and Italian**.
 
 [![CI](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/ci.yml/badge.svg)](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/codeql.yml/badge.svg)](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/codeql.yml)
@@ -31,13 +38,33 @@ cognivore> The spec (spec.md) sets a 5000ms timeout with exponential
 backoff. 15% of that is 750ms.
 ```
 
-The same loop, in the web UI -- a live trace of the tool call and the
-retrieved passage it answered from, in whichever of the 9 languages and 3
-themes you pick:
+## What makes it different
 
-| Aurora theme, English -- RAG trace | Dark theme, Russian -- calculator |
-|---|---|
-| ![Cognivore web UI: aurora theme, English, a search_knowledge_base tool call and its retrieved passage](docs/screenshots/web-ui-en.png) | ![Cognivore web UI: dark theme, Russian, a calculator tool call](docs/screenshots/web-ui-ru.png) |
+Most RAG chat apps ask you to *trust* the answer. Cognivore shows its work,
+using classic, inspectable ML (NumPy only -- see
+[`cognivore.ml`](src/cognivore/ml)) rather than yet another model call:
+
+| | What you see | How it works |
+|---|---|---|
+| **Knowledge map** | Every chunk of your knowledge base as a star on a map, grouped into named topics. Ask a question and it lands on the map, with beams to the passages that answered it. | PCA of the chunk embeddings to 2-D; topics by k-means++ with the number of topics picked by silhouette score; topic names by class-based TF-IDF. Rebuilt only when the knowledge base changes. |
+| **Answer check** | A grounding meter under every answer; sentences the sources don't support get a wavy underline, hovering a source highlights the sentences it backs. | Each sentence is scored against each retrieved passage (60% keyword overlap + 40% embedding similarity); the answer's score is the length-weighted mean. |
+| **Retrieval X-ray** | Each source shows how much of its score came from *meaning* vs *exact words*, and how confident retrieval was overall. | The hybrid store's vector and BM25 components, plus a coverage measure that handles Chinese without a word segmenter. |
+| **Gap radar** | Questions your documents couldn't answer, merged across rephrasings and ranked by how often they were asked -- a to-do list for your knowledge base. | Retrieval confidence below a threshold; near-duplicate questions merged by token Jaccard similarity; persisted next to the store. |
+
+The web UI is fully localized into **Russian (default), English,
+Simplified Chinese, Spanish, Hindi, French, German, Japanese and Italian**
+-- including plural forms and locale number formatting; the browser
+language picks the initial one -- and retrieval itself is multilingual (CJK-aware tokenization and a
+multilingual embedding model), so a Chinese question finds a Chinese
+document as reliably as an English one finds an English document.
+
+| English · dark | Русский · light | 中文 · aurora |
+|---|---|---|
+| ![Cognivore web UI in English: an answer with its grounding meter, sources, and the knowledge map](docs/screenshots/web-ui-en.png) | ![Cognivore web UI in Russian: an answer, its sources and a question on the gap radar](docs/screenshots/web-ui-ru.png) | ![Cognivore web UI in Chinese: an answer from the Chinese demo handbook on the knowledge map](docs/screenshots/web-ui-zh.png) |
+
+Screenshots are of the zero-download offline demo mode (`FakeLLMBackend`
+with the bundled demo handbooks), so what you see is exactly what a fresh
+`docker compose up` shows before any model is pulled.
 
 ## Why this exists
 
@@ -71,11 +98,22 @@ dependencies are missing) are implemented rather than imported.
   or a deterministic, dependency-free `FakeLLMBackend` that exercises the
   exact same tool-calling code path with zero download -- what the test
   suite and CI run against.
-- **Web UI**: FastAPI + SSE streaming + a vanilla JS/HTML/CSS chat
-  interface (no build step, no framework) with file/audio/video
-  drag-and-drop, live "thinking"/connection indicators, dark/light/aurora
-  themes, and localization into English, Russian, German, French,
-  Italian, Spanish, Simplified Chinese, Japanese, and Hindi.
+- **Explainability layer** (`cognivore.ml`, NumPy only): knowledge map
+  (PCA + k-means++ + silhouette-selected topic count + c-TF-IDF labels),
+  sentence-level answer grounding, retrieval confidence, and a persistent
+  knowledge-gap radar -- streamed to the UI as an `insight` event after
+  every answer.
+- **Multilingual retrieval**: CJK-aware tokenization (character bigrams,
+  as in Lucene's `CJKAnalyzer`) for BM25 and the offline embedder, a
+  multilingual semantic embedding model by default, query-focused
+  snippets, and automatic re-embedding of a saved knowledge base when the
+  embedding model changes.
+- **Web UI**: FastAPI + SSE streaming + a vanilla JS/HTML/CSS interface
+  (no build step, no framework) with an animated canvas knowledge map,
+  grounding and confidence meters, source cards, gap radar, multi-file
+  drag-and-drop, dark/light/aurora themes, a responsive layout from phone
+  to widescreen, and localization into Russian, English, Simplified
+  Chinese, Spanish, Hindi, French, German, Japanese and Italian.
 - Full test suite, ruff lint+format, mypy (strict-ish, including a stub for
   the native extension), and a multi-OS/multi-Python CI matrix.
 
@@ -184,8 +222,8 @@ just falls back to the offline `FakeLLMBackend` demo mode until a model is
 available.
 
 The compose stack also sets `COGNIVORE_SEED_DEMO_KB=true`, so a fresh
-knowledge base is seeded automatically with two bundled demo company
-handbooks (English + Russian -- pricing, SLA, security, refund policy,
+knowledge base is seeded automatically with nine bundled demo company
+handbooks, one per UI language (pricing, SLA, security, refund policy,
 support FAQ) instead of opening to an empty dropzone. It only ever seeds
 an *empty* knowledge base: once you've ingested your own documents, this
 is a permanent no-op. Set it to `false` in `docker-compose.yml` (or
@@ -254,17 +292,18 @@ docker pull ghcr.io/anton-sergeev-ea/cognivore:latest
 ```bash
 cognivore chat                              # interactive REPL
 cognivore ingest ./docs                     # recursively indexes .txt/.md/.markdown/.rst
-cognivore seed-demo                         # adds the bundled EN+RU demo company handbooks
+cognivore seed-demo                         # adds the bundled demo handbooks (one per UI language)
 cognivore serve --host 0.0.0.0 --port 8420  # web UI + REST/SSE API
 cognivore bench                             # index build/search benchmarks (see below)
 ```
 
 **Web UI** (`cognivore serve`, then open the printed URL): a chat interface
 with live token streaming, a drag-and-drop zone for `.txt`/`.md` ingestion
-and for audio/video files, a language switcher (9 languages), three themes
-(dark/light/aurora), and a trace view of every tool call the agent made
-for a given answer (click a step to see the full, untruncated tool
-output).
+and for audio/video files, a language switcher (9 languages),
+three themes (dark/light/aurora), a trace view of every tool call the
+agent made for a given answer, and the explainability panel described in
+[What makes it different](#what-makes-it-different): click any star on the
+map or any source card to read the full passage.
 
 **REST/SSE API**, once `cognivore serve` is running:
 
@@ -278,7 +317,20 @@ curl -X POST http://127.0.0.1:8420/api/chat \
 curl -N "http://127.0.0.1:8420/api/chat/stream?message=Summarize+the+ingested+docs"
 
 curl -X POST http://127.0.0.1:8420/api/ingest/file -F "file=@./notes.md"
+
+curl -X POST http://127.0.0.1:8420/api/ingest/text \
+  -H "Content-Type: application/json" \
+  -d '{"source": "faq.md", "text": "We ship a Helm chart for Kubernetes."}'
+
+curl http://127.0.0.1:8420/api/insights/map    # knowledge map: points, topics, silhouette
+curl http://127.0.0.1:8420/api/insights/gaps   # the gap radar
 ```
+
+`/api/chat` returns an `insight` object next to the answer (sources with
+their score breakdown, retrieval confidence, grounding with per-sentence
+character offsets, the question's position on the map, and whether it
+was recorded as a gap); `/api/chat/stream` sends the same object as a
+final `insight` SSE event, after the answer has finished streaming.
 
 **As a library**, rather than through the CLI or the API (see
 `examples/`):
@@ -348,9 +400,11 @@ and this README isn't going to pretend it is.
 
 ```bash
 pip install -e ".[dev]"
-pytest --cov                 # 71 tests: calculator safety, chunking,
+pytest --cov                 # 157 tests: calculator safety, chunking,
                               # native-vs-Python index parity, NSW recall,
-                              # agent loop, RAG store, FastAPI endpoints
+                              # agent loop, RAG store, FastAPI endpoints,
+                              # PCA/k-means/silhouette, grounding, gaps,
+                              # CJK tokenization, snippets
 ruff check . && ruff format --check .
 mypy -p cognivore
 ```
@@ -371,16 +425,17 @@ instead of Faiss/hnswlib).
 native/            C++ vector index core + pybind11 bindings
 src/cognivore/
   index/            native-vs-fallback index selection
-  rag/              chunking, embeddings, hybrid document store
+  rag/              chunking, tokenization, embeddings, snippets, hybrid store
+  ml/               knowledge map, grounding, retrieval confidence, gap radar
   agent/            ReAct loop, memory, prompt/parsing
   tools/            calculator, RAG search, audio, video
   llm/              llama.cpp backend + FakeLLMBackend
   media/            faster-whisper / OpenCV wrappers
-  web/              FastAPI app + static chat UI
+  web/              FastAPI app + static UI (chat, canvas knowledge map, i18n)
   cli.py            cognivore chat|ingest|serve|bench
 benchmarks/         standalone scripts for the numbers above
 examples/           minimal library-usage scripts
-tests/              pytest suite (71 tests)
+tests/              pytest suite (157 tests)
 ```
 
 ## License

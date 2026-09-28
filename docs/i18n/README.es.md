@@ -13,6 +13,8 @@ de tu máquina.
 
 🌐 **Lee esto en otro idioma:** [English](../../README.md) | [Русский](README.ru.md) | [Deutsch](README.de.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [Español](README.es.md) | [中文](README.zh.md) | [日本語](README.ja.md) | [हिन्दी](README.hi.md)
 
+> **Nota:** esta traducción describe la versión 0.1. Novedades de la 0.2: un mapa del conocimiento, la verificación frase por frase de las respuestas y un radar de lagunas; consulte el [README en inglés](../../README.md#what-makes-it-different). Las capturas y la descripción de la interfaz de abajo están desactualizadas.
+
 Cognivore es un framework de agentes al estilo ReAct con retrieval-augmented
 generation y soporte para herramientas multimodales (transcripción de audio,
 análisis de escenas en vídeo), construido específicamente para funcionar

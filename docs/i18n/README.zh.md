@@ -1,8 +1,12 @@
 # Cognivore
 
-**本地优先、无需 PyTorch 的多模态智能体框架。** LLM 推理 + RAG，配备手写的
-C++ 向量索引与网页聊天界面 —— 一切均可在纯 CPU 笔记本电脑上运行，无需任何
-内容离开你的设备。
+**面向您自有文档的可解释本地 AI。** 每个答案都附带证据：实时的**知识地图**
+显示答案取自哪些片段，**每一句话都会**对照这些来源进行核查，而文档无法回答的
+问题会进入**知识缺口雷达**。其底层是一个无需 PyTorch 的多模态智能体框架——
+LLM 推理 + RAG，配备手写的 C++ 向量索引——一切均可在纯 CPU 笔记本电脑上运行，
+无需任何内容离开您的设备。
+
+界面支持 9 种语言：**俄语、英语、中文、西班牙语、印地语、法语、德语、日语和意大利语**。
 
 [![CI](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/ci.yml/badge.svg)](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/codeql.yml/badge.svg)](https://github.com/Anton-Sergeev-EA/cognivore/actions/workflows/codeql.yml)
@@ -29,11 +33,29 @@ cognivore> The spec (spec.md) sets a 5000ms timeout with exponential
 backoff. 15% of that is 750ms.
 ```
 
-同样的流程，在网页界面中呈现——工具调用及其检索到的片段的实时轨迹，可在全部 9 种语言和 3 种主题中任选：
+## Cognivore 的独特之处
 
-| Aurora 主题，英文——RAG 轨迹 | 深色主题，俄文——计算器 |
-|---|---|
-| ![Cognivore 网页界面：Aurora 主题、英文，一次 search_knowledge_base 工具调用及其检索到的片段](../screenshots/web-ui-en.png) | ![Cognivore 网页界面：深色主题、俄文，一次 calculator 工具调用](../screenshots/web-ui-ru.png) |
+大多数 RAG 聊天应用要求您*相信*答案。Cognivore 则展示它的推理依据——使用经典、
+可检验的机器学习方法（仅依赖 NumPy，见 [`cognivore.ml`](../../src/cognivore/ml)），
+而不是再调用一次模型：
+
+| | 您看到的 | 实现原理 |
+|---|---|---|
+| **知识地图** | 知识库中的每个片段都是地图上的一颗星，并按主题分组命名。提出问题后，它会出现在地图上，并有光束连向回答它的片段。 | 对片段向量做 PCA 降到二维；主题由 k-means++ 聚类得到，主题数按轮廓系数自动选择；主题名称来自类别 TF-IDF（c-TF-IDF）。仅在知识库变化时重新计算。 |
+| **答案核查** | 每个答案下方都有依据充分度指示；来源不支持的句子会加波浪下划线，悬停某个来源时会高亮它所支持的句子。 | 每句话与每个检索片段比对（60% 关键词重合 + 40% 向量相似度）；答案得分为按句子长度加权的平均值。 |
+| **检索透视** | 每个来源都显示其得分中有多少来自*语义*、多少来自*词语精确匹配*，以及整体检索置信度。 | 混合检索中的向量与 BM25 分量，外加一个无需分词词典也能正确处理中文的问题覆盖度指标。 |
+| **知识缺口雷达** | 文档无法回答的问题，按不同说法合并、按提问频率排序——一份现成的知识库补充清单。 | 检索置信度低于阈值即记录；相似问题按 Jaccard 系数合并；列表与知识库一同保存。 |
+
+界面已完整本地化为**俄语（默认）、英语、简体中文、西班牙语、印地语、法语、德语、日语和意大利语**（包括复数形式和数字格式，初始语言按浏览器语言选择），
+检索本身也支持多语言（感知中日韩文字的分词和多语言向量模型）：中文问题能像英文
+问题找到英文文档一样可靠地找到中文文档。
+
+| English · 深色 | Русский · 浅色 | 中文 · 极光 |
+|---|---|---|
+| ![英文界面：带依据充分度指示、来源和知识地图的答案](../screenshots/web-ui-en.png) | ![俄文界面：答案、来源以及知识缺口雷达中的问题](../screenshots/web-ui-ru.png) | ![中文界面：来自中文演示手册的答案及其在知识地图上的位置](../screenshots/web-ui-zh.png) |
+
+截图来自无需下载任何模型的离线演示模式（`FakeLLMBackend` + 内置演示手册），即全新
+执行 `docker compose up` 且尚未拉取模型时看到的界面。
 
 ## 项目缘由
 
@@ -63,10 +85,16 @@ backoff. 15% of that is 750ms.
 - **可插拔的 LLM 后端**：通过 `llama-cpp-python` 进行本地 GGUF 推理，
   或使用确定性、零依赖的 `FakeLLMBackend`，它无需任何下载即可走完完全
   相同的工具调用代码路径 —— 测试套件和 CI 正是针对它运行的。
-- **网页界面**：FastAPI + SSE 流式传输 + 纯原生 JS/HTML/CSS 聊天界面
-  （无需构建步骤，无需框架），支持文件/音频/视频拖放上传、实时“思考
-  中”/连接状态指示、深色/浅色/aurora 三种主题，并本地化为英语、俄语、
-  德语、法语、意大利语、西班牙语、简体中文、日语和印地语。
+- **可解释性层**（`cognivore.ml`，仅依赖 NumPy）：知识地图（PCA + k-means++ +
+  按轮廓系数选择主题数 + c-TF-IDF 主题名）、逐句依据核查、检索置信度以及可持久
+  保存的知识缺口雷达——每次回答后通过 SSE `insight` 事件发送到界面。
+- **多语言检索**：面向 BM25 和离线向量器的中日韩感知分词（字符二元组，与 Lucene
+  的 `CJKAnalyzer` 相同）、默认多语言向量模型、围绕相关位置截取的片段摘要，以及
+  更换向量模型时自动重建已保存知识库的向量。
+- **网页界面**：FastAPI + SSE 流式传输 + 纯原生 JS/HTML/CSS 界面（无需构建步骤，
+  无需框架）：canvas 动画知识地图、依据充分度与置信度指示、来源卡片、知识缺口
+  雷达、多文件拖放上传、深色/浅色/极光三种主题、从手机到宽屏的自适应布局，并本地
+  化为 9 种语言。
 - 完整的测试套件、ruff 代码检查与格式化、mypy（近乎严格模式，包括针对
   原生扩展的类型存根），以及覆盖多操作系统/多 Python 版本的 CI 矩阵。
 
@@ -166,8 +194,8 @@ docker compose exec ollama ollama pull qwen2.5:3b   # 仅需一次，约 2GB
 
 compose 方案还设置了
 `COGNIVORE_SEED_DEMO_KB=true`，因此全新的知识
-库会自动填充两份内置的演示公司手册（英文 + 俄
-文——价格方案、SLA、安全、退款政策、支持常见问
+库会自动填充九份内置的演示公司手册（每种界面语言
+一份——价格方案、SLA、安全、退款政策、支持常见问
 题），而不是打开一个空的拖放区。它只会填充 *空
 * 的知识库：一旦你导入了自己的文档，这就永久变
 成空操作。可以在 `docker-compose.yml` 中将其设
@@ -236,16 +264,17 @@ docker pull ghcr.io/anton-sergeev-ea/cognivore:latest
 ```bash
 cognivore chat                              # 交互式 REPL
 cognivore ingest ./docs                     # 递归索引 .txt/.md/.markdown/.rst 文件
-cognivore seed-demo                         # 添加内置的英文+俄文演示公司手册
+cognivore seed-demo                         # 添加内置的演示公司手册（每种界面语言一份）
 cognivore serve --host 0.0.0.0 --port 8420  # 网页界面 + REST/SSE API
 cognivore bench                             # 索引构建/搜索基准测试（见下文）
 ```
 
 **网页界面**（运行 `cognivore serve`，然后打开打印出来的 URL）：具备实
 时 token 流式输出的聊天界面，可拖放上传 `.txt`/`.md` 文件以及音频/视频
-文件的区域，语言切换器（9 种语言），三种主题（深色/浅色/aurora），以
-及针对某个回答智能体所做每一次工具调用的追踪视图（点击某一步即可查看
-完整、未截断的工具输出）。
+文件的区域，语言切换器（9 种语言），三种主题（深色/浅色/极光），
+针对某个回答智能体所做每一次工具调用的追踪视图，以及
+[Cognivore 的独特之处](#cognivore-的独特之处) 中介绍的可解释性面板：
+点击地图上的任意一颗星或任意来源卡片即可阅读完整片段。
 
 **REST/SSE API**，在 `cognivore serve` 运行之后：
 
@@ -323,9 +352,11 @@ NSW 图在每一步上的开销（堆操作、跨图的随机内存访问、已�
 
 ```bash
 pip install -e ".[dev]"
-pytest --cov                 # 71 个测试：计算器安全性、分块（chunking），
+pytest --cov                 # 157 个测试：计算器安全性、分块（chunking），
                               # 原生索引与 Python 索引的一致性、NSW recall，
-                              # 智能体循环、RAG 存储、FastAPI 端点
+                              # 智能体循环、RAG 存储、FastAPI 端点，
+                              # PCA/k-means/轮廓系数、依据核查、知识缺口、
+                              # 中文分词、片段摘要
 ruff check . && ruff format --check .
 mypy -p cognivore
 ```
@@ -345,16 +376,17 @@ function calling，以及使用手写索引而非 Faiss/hnswlib）。
 native/            C++ vector index core + pybind11 bindings
 src/cognivore/
   index/            native-vs-fallback index selection
-  rag/              chunking, embeddings, hybrid document store
+  rag/              chunking, tokenization, embeddings, snippets, hybrid store
+  ml/               knowledge map, grounding, retrieval confidence, gap radar
   agent/            ReAct loop, memory, prompt/parsing
   tools/            calculator, RAG search, audio, video
   llm/              llama.cpp backend + FakeLLMBackend
   media/            faster-whisper / OpenCV wrappers
-  web/              FastAPI app + static chat UI
+  web/              FastAPI app + static UI (chat, canvas knowledge map, i18n)
   cli.py            cognivore chat|ingest|serve|bench
 benchmarks/         standalone scripts for the numbers above
 examples/           minimal library-usage scripts
-tests/              pytest suite (71 tests)
+tests/              pytest suite (157 tests)
 ```
 
 ## 许可证

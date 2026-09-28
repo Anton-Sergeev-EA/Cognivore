@@ -4,6 +4,82 @@ All notable changes to this project are documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this
 project uses [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - Unreleased
+
+### Added
+
+- **Explainability layer** (`cognivore.ml`, NumPy only):
+  - a knowledge map of the whole knowledge base -- PCA to 2-D, k-means++
+    topics with the number of topics chosen by silhouette score, topic
+    names by class-based TF-IDF -- served at `GET /api/insights/map` and
+    cached per store version;
+  - sentence-level answer grounding (keyword recall + embedding cosine per
+    sentence, with character offsets for in-place highlighting);
+  - retrieval confidence with CJK-aware query coverage;
+  - a persistent knowledge-gap radar (`GET`/`DELETE /api/insights/gaps`)
+    that merges rephrased questions and ranks them by frequency.
+- An `insight` object on `POST /api/chat` and a final `insight` SSE event
+  (plus `answer_final` with the exact answer text) on `/api/chat/stream`.
+- `GET /api/knowledge_base/{id}` to read a single chunk.
+- A redesigned web UI: animated canvas knowledge map with beams from the
+  question to its sources, grounding and confidence meters, weakly
+  supported sentences underlined, source cards with a meaning-vs-words
+  score breakdown, gap radar, onboarding screen with example questions,
+  multi-file upload, responsive drawers for tablet and phone, and
+  accessibility improvements (keyboard focus, ARIA labels, reduced-motion
+  support).
+- Demo knowledge bases in every UI language: a fictional company handbook
+  each in Chinese, Spanish, Hindi, French, German, Japanese and Italian,
+  seeded alongside the English and Russian ones, with UI example questions
+  that each language's handbook answers; `tests/test_languages.py` checks
+  every example and a gap question end to end in all nine languages.
+- Query-focused snippets (`cognivore.rag.snippets`): the search tool now
+  shows the model the part of each chunk that matches the question, not
+  just its first 300 characters.
+- Offline demo mode understands plain questions in any UI language (not
+  only English keywords) and percentages in all of them ("15% от 4900",
+  "15 % von 149", "999 的 15%", "149 का 15%", ...).
+- Upload size limits (`COGNIVORE_MAX_DOCUMENT_UPLOAD_MB`,
+  `COGNIVORE_MAX_MEDIA_UPLOAD_MB`); oversized uploads get HTTP 413 instead
+  of being buffered in memory.
+
+### Changed
+
+- The web UI is rewritten in all 9 languages, ordered Russian (default),
+  English, then by global reach: Simplified Chinese, Spanish, Hindi,
+  French, German, Japanese, Italian -- with proper plural forms
+  (`Intl.PluralRules`) and locale number formatting. The browser language
+  picks the initial one, falling back to Russian; the switcher is now a
+  compact language menu.
+- Default embedding model is now the multilingual
+  `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` (same
+  384 dimensions) instead of the English-only `BAAI/bge-small-en-v1.5`.
+- `POST /api/ingest/text` takes a JSON body (`{"source", "text"}`) instead
+  of query parameters, so long documents no longer hit URL length limits.
+- The Docker image persists the fastembed model cache in `/data`.
+
+### Fixed
+
+- Hindi tokenization: Devanagari vowel signs are combining marks, not
+  "word" characters, so words fell apart into bare consonants; the danda
+  (।) is now also a sentence terminator.
+- Sentence splitting silently dropped lines without terminal punctuation
+  (headings, wrapped lines), which hurt both snippets and grounding.
+- The offline hashing embedder ignores stopwords, so frequent function
+  words no longer outrank topical ones.
+- Chinese (and Japanese) retrieval: whitespace tokenization turned a whole
+  CJK sentence into one token, so BM25 and the offline embedder scored
+  every Chinese query 0 against every chunk. Tokenization is now
+  CJK-aware (character bigrams) and strips punctuation in all languages.
+- A saved knowledge base loaded with a different embedding model silently
+  compared vectors from two different models; it is now re-embedded
+  automatically (the embedder id is stored with the index).
+- Ingestion and media uploads no longer block the event loop while
+  embedding; the document store and the agent are safe to use from
+  concurrent requests.
+- Offline demo answers no longer echo every retrieved passage verbatim
+  (source labels containing parentheses broke the passage parser).
+
 ## [0.1.0] - Unreleased
 
 ### Added

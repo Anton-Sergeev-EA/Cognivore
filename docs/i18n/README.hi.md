@@ -13,6 +13,8 @@ RAG, हाथ से लिखे गए C++ वेक्टर इंडेक
 
 🌐 **इसे किसी अन्य भाषा में पढ़ें:** [English](../../README.md) | [Русский](README.ru.md) | [Deutsch](README.de.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [Español](README.es.md) | [中文](README.zh.md) | [日本語](README.ja.md) | [हिन्दी](README.hi.md)
 
+> **ध्यान दें:** यह अनुवाद संस्करण 0.1 का वर्णन करता है। 0.2 में नया: नॉलेज मैप, उत्तरों की वाक्य-दर-वाक्य जाँच और नॉलेज-गैप रडार — देखें [अंग्रेज़ी README](../../README.md#what-makes-it-different); नीचे दिए गए स्क्रीनशॉट और UI विवरण पुराने हैं।
+
 Cognivore एक ReAct-स्टाइल एजेंट फ्रेमवर्क है जिसमें retrieval-augmented
 generation और मल्टीमॉडल टूल सपोर्ट (ऑडियो ट्रांसक्रिप्शन, वीडियो सीन
 एनालिसिस) शामिल है, और इसे खास तौर पर पूरी तरह से CPU-only मशीन पर चलाने

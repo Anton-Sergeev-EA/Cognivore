@@ -12,6 +12,8 @@ LLM による推論 + RAG を、自作の C++ ベクトルインデックスと 
 
 🌐 **他の言語で読む：** [English](../../README.md) | [Русский](README.ru.md) | [Deutsch](README.de.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [Español](README.es.md) | [中文](README.zh.md) | [日本語](README.ja.md) | [हिन्दी](README.hi.md)
 
+> **注意:** この翻訳はバージョン 0.1 について説明しています。0.2 ではナレッジマップ、回答の文単位の根拠チェック、ナレッジギャップ・レーダーが追加されました。詳しくは [英語版 README](../../README.md#what-makes-it-different) をご覧ください。以下のスクリーンショットと UI の説明は古くなっています。
+
 Cognivore は、retrieval-augmented generation とマルチモーダルツール(音声の書き起こし、
 動画のシーン解析)をサポートする ReAct 方式のエージェントフレームワークであり、スタック
 全体にわたって PyTorch への依存を一切持たず、CPU のみのマシン上で完全に動作するように
