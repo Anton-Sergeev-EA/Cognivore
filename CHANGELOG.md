@@ -4,7 +4,7 @@ All notable changes to this project are documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this
 project uses [Semantic Versioning](https://semver.org/).
 
-## [0.2.0] - Unreleased
+## [0.2.0] - 2026-09-28
 
 ### Added
 
@@ -129,7 +129,7 @@ project uses [Semantic Versioning](https://semver.org/).
 - Offline demo answers no longer echo every retrieved passage verbatim
   (source labels containing parentheses broke the passage parser).
 
-## [0.1.0] - Unreleased
+## [0.1.0] - 2026-09-23
 
 ### Added
 
@@ -264,3 +264,6 @@ project uses [Semantic Versioning](https://semver.org/).
   ollama pull ...`, or `cognivore` reaching it as `http://ollama:11434`
   over the compose network) actually needed that port published to the
   host at all, so the mapping is simply gone rather than moved.
+
+[0.2.0]: https://github.com/Anton-Sergeev-EA/Cognivore/releases/tag/v0.2.0
+[0.1.0]: https://github.com/Anton-Sergeev-EA/Cognivore/tree/212e495a5b0d48f21236dd85476599e216d9ec80
