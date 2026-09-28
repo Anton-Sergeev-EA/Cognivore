@@ -16,8 +16,11 @@ import json
 import re
 from collections.abc import Iterator
 
+from cognivore.agent.replies import not_in_knowledge_base
 from cognivore.llm.base import ChatMessage, GenerationConfig
+from cognivore.ml.intent import looks_like_question
 from cognivore.ml.lang import detect_language
+from cognivore.tools.rag_search import NOTHING_FOUND
 
 _MATH_CANDIDATE_RE = re.compile(r"[\d().\s+\-*/]{3,}")
 # The search tool formats hits as "[1] (source) passage\n\n[2] ...".
@@ -43,39 +46,10 @@ _SEARCH_KEYWORDS = (
     "知识库",
     "文档",
 )
-_QUESTION_STARTS = (
-    "what",
-    "how",
-    "which",
-    "when",
-    "where",
-    "why",
-    "who",
-    "is ",
-    "are ",
-    "do ",
-    "does ",
-    "can ",
-    "что",
-    "как",
-    "какой",
-    "какая",
-    "какие",
-    "каков",
-    "сколько",
-    "когда",
-    "где",
-    "почему",
-    "зачем",
-    "кто",
-    "есть ли",
-    "можно ли",
-)
-_ZH_QUESTION_MARKERS = ("吗", "什么", "多少", "怎么", "如何", "哪", "是否", "能否", "可以")
 _OFFLINE_ECHO = {
     "ru": "(офлайн-демо) Вы написали: {text}",
-    "zh": "（离线演示模式）您输入的是：{text}",  # noqa: RUF001 - CJK punctuation is correct here
-    "ja": "（オフラインデモ）入力内容：{text}",  # noqa: RUF001 - CJK punctuation is correct here
+    "zh": "（离线演示模式）您输入的是：{text}",
+    "ja": "（オフラインデモ）入力内容：{text}",
     "hi": "(ऑफ़लाइन डेमो) आपने लिखा: {text}",
     "en": "(offline demo mode) You said: {text}",
 }
@@ -103,19 +77,13 @@ def _extract_percent_expression(text: str) -> str | None:
     return f"{base.replace(',', '.')} * {pct.replace(',', '.')} / 100"
 
 
-def _looks_like_question(text: str) -> bool:
-    stripped = text.strip().lower()
-    if stripped.endswith(("?", "\uff1f")):
-        return True
-    if stripped.startswith(_QUESTION_STARTS):
-        return True
-    return any(marker in stripped for marker in _ZH_QUESTION_MARKERS)
-
-
-def _offline_answer_from_observation(observation: str) -> str:
+def _offline_answer_from_observation(observation: str, question: str = "") -> str:
     """With the search tool's formatted hits, answer with the best passage
-    itself (the UI shows its source separately); anything else -- e.g. a
-    calculator result -- is echoed as-is."""
+    itself (the UI shows its source separately); with nothing found, say so
+    in the question's language; anything else -- e.g. a calculator result --
+    is echoed as-is."""
+    if observation.strip() == NOTHING_FOUND:
+        return not_in_knowledge_base(question)
     match = _TOP_PASSAGE_RE.match(observation)
     if match is None:
         return observation
@@ -153,7 +121,7 @@ class FakeLLMBackend:
             # echo back only the observation itself to stay a faithful
             # stand-in for "the model used what it was given").
             observation = observation.rsplit("\n\nIf the passage above answers", 1)[0]
-            answer = _offline_answer_from_observation(observation)
+            answer = _offline_answer_from_observation(observation, _original_question(messages))
             return f"Thought: I now have the observation I need.\nFinal Answer: {answer}"
 
         expr = _extract_percent_expression(last_user) or _extract_math_expression(last_user)
@@ -168,7 +136,7 @@ class FakeLLMBackend:
             m.role == "system" and "search_knowledge_base" in m.content for m in messages
         )
         wants_search = any(kw in last_user.lower() for kw in _SEARCH_KEYWORDS)
-        if has_search and (wants_search or _looks_like_question(last_user)):
+        if has_search and (wants_search or looks_like_question(last_user)):
             payload = json.dumps({"query": last_user}, ensure_ascii=False)
             return (
                 "Thought: This may be answered by the ingested documents; I'll search them.\n"
@@ -184,6 +152,14 @@ class FakeLLMBackend:
         chunk_size = 24
         for i in range(0, len(text), chunk_size):
             yield text[i : i + chunk_size]
+
+
+def _original_question(messages: list[ChatMessage]) -> str:
+    """The user's own message of this turn (not a tool observation)."""
+    for message in reversed(messages):
+        if message.role == "user" and not message.content.startswith("Observation:"):
+            return message.content
+    return ""
 
 
 def _last_user_content(messages: list[ChatMessage]) -> str:

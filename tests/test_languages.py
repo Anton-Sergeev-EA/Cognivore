@@ -77,6 +77,13 @@ def test_example_questions_are_answered_in_their_own_language(
 
 @pytest.mark.parametrize("lang", LANGS)
 def test_unanswerable_question_is_a_gap_in_every_language(client: TestClient, lang: str) -> None:
-    insight = client.post("/api/chat", json={"message": _UNANSWERABLE[lang]}).json()["insight"]
+    from cognivore.agent.replies import NOT_IN_KNOWLEDGE_BASE
+
+    body = client.post("/api/chat", json={"message": _UNANSWERABLE[lang]}).json()
+    insight = body["insight"]
     assert insight["used_knowledge_base"], lang
     assert insight["gap"], (lang, insight["confidence"])
+    # An honest "not in the knowledge base", in the question's language --
+    # not the least-unrelated passage presented as an answer.
+    assert body["answer"].strip() == NOT_IN_KNOWLEDGE_BASE[lang], lang
+    assert insight["hits"] == [] and insight["grounding"] is None

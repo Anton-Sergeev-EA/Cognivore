@@ -99,3 +99,62 @@ def test_ingest_command_accumulates_across_runs(tmp_path: Path) -> None:
 
     final_store = load_or_build_document_store(settings, store_dir)
     assert final_store.sources() == {"first.md", "second.md"}
+
+
+def test_auto_context_is_wired_for_real_models_only(tmp_path) -> None:
+    from cognivore.bootstrap import build_agent, build_document_store
+
+    settings = Settings(data_dir=tmp_path, prefer_semantic_embedder=False, llm_provider="fake")
+    store = build_document_store(settings)
+    assert build_agent(settings, store=store, include_media=False).context_provider is None
+
+    class _RealishLLM:
+        def generate(self, messages, config):
+            return "Final Answer: ok"
+
+        def stream(self, messages, config):
+            yield "Final Answer: ok"
+
+    agent = build_agent(settings, store=store, llm=_RealishLLM(), include_media=False)
+    assert agent.context_provider is not None
+    assert agent.context_provider("anything") is None  # empty store: nothing to add
+
+    store.add_text("A full refund is available within 14 days of payment.", source="p.md")
+    passages = agent.context_provider("What is the refund policy?")
+    assert passages is not None and "14 days" in passages
+    assert agent.context_provider("What is 6 * 7?") is None
+
+    off = Settings(
+        data_dir=tmp_path, prefer_semantic_embedder=False, llm_provider="fake", auto_context=False
+    )
+    assert (
+        build_agent(off, store=store, llm=_RealishLLM(), include_media=False).context_provider
+        is None
+    )
+
+
+def test_auto_context_drops_passages_far_below_the_best_match(tmp_path) -> None:
+    from cognivore.bootstrap import build_context_provider, build_document_store
+
+    settings = Settings(data_dir=tmp_path, prefer_semantic_embedder=False)
+    store = build_document_store(settings)
+    store.add_text("Refund policy: a full refund within 14 days of the first payment.", "a.md")
+    store.add_text("Maintenance runs on Wednesdays; customers are notified 72 hours ahead.", "b.md")
+    store.add_text("Webhooks fire when an upload completes.", "c.md")
+    passages = build_context_provider(store, settings)("What is the refund policy?")
+    assert passages is not None
+    assert "14 days" in passages
+    assert "72 hours" not in passages
+    assert "Webhooks" not in passages
+
+
+def test_auto_context_reports_an_empty_lookup_only_for_knowledge_questions(tmp_path) -> None:
+    from cognivore.bootstrap import build_context_provider, build_document_store
+
+    settings = Settings(data_dir=tmp_path, prefer_semantic_embedder=False)
+    store = build_document_store(settings)
+    store.add_text("Refund policy: a full refund within 14 days of the first payment.", "a.md")
+    provide = build_context_provider(store, settings)
+    assert provide("Do you have a mobile app for iPhone?") == ""  # searched, nothing there
+    assert provide("What is 15% of 149?") is None  # arithmetic: lookup doesn't apply
+    assert provide("Hi") is None  # small talk

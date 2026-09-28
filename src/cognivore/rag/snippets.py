@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 
+from cognivore.rag.store import RetrievedChunk
 from cognivore.rag.tokenize import STOPWORDS, is_cjk_run, tokenize
 
 # Sentence terminators: ASCII . ! ?, the Devanagari danda and double danda
@@ -85,3 +86,31 @@ def best_snippet(text: str, query: str, limit: int = 300) -> str:
         lo -= 1
         start = spans[lo][0]
     return text[start:end]
+
+
+_WS_RE = re.compile(r"\s+")
+
+
+def distinct_snippets(
+    hits: list[RetrievedChunk], query: str, limit: int = 300, top_k: int | None = None
+) -> list[tuple[RetrievedChunk, str]]:
+    """Pairs each hit with its :func:`best_snippet`, dropping hits whose
+    snippet repeats one already kept.
+
+    Neighbouring chunks overlap (``chunk_overlap``), so two of them often
+    centre on the very same sentence; showing both -- to the model or in the
+    UI's source list -- repeats a passage and hides a genuinely different
+    one. Order (i.e. rank) is preserved; ``top_k`` caps the result.
+    """
+    kept: list[tuple[RetrievedChunk, str]] = []
+    seen: list[str] = []
+    for hit in hits:
+        snippet = best_snippet(hit.text, query, limit=limit)
+        key = _WS_RE.sub(" ", snippet).strip().lower()
+        if any(key in other or other in key for other in seen):
+            continue
+        seen.append(key)
+        kept.append((hit, snippet))
+        if top_k is not None and len(kept) >= top_k:
+            break
+    return kept

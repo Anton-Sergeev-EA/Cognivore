@@ -10,7 +10,7 @@ import logging
 import os
 from pathlib import Path
 
-from cognivore.agent.core import Agent
+from cognivore.agent.core import Agent, ContextProvider
 from cognivore.agent.memory import ConversationBuffer, VectorMemory
 from cognivore.config import Settings
 from cognivore.llm.base import GenerationConfig, LLMBackend
@@ -240,7 +240,9 @@ def _is_importable(module_name: str) -> bool:
 def build_tool_registry(
     store: DocumentStore, settings: Settings, include_media: bool = False
 ) -> ToolRegistry:
-    tools = ToolRegistry([CalculatorTool(), RagSearchTool(store)])
+    tools = ToolRegistry(
+        [CalculatorTool(), RagSearchTool(store, min_confidence=settings.auto_context_threshold)]
+    )
     if include_media:
         if _is_importable("faster_whisper"):
             from cognivore.tools.audio_transcribe import AudioTranscribeTool
@@ -264,6 +266,41 @@ def build_tool_registry(
     return tools
 
 
+def build_context_provider(
+    store: DocumentStore, settings: Settings, top_k: int = 3
+) -> ContextProvider:
+    """Retrieval that runs before the model is called (see
+    ``Agent._prepare``). For a question it returns:
+
+    * the formatted passages, when retrieval is confident enough;
+    * ``""`` -- "searched, nothing relevant" -- when the message is a
+      question about facts (not arithmetic or small talk) and the knowledge
+      base has nothing on it, so the model is told so and the question is
+      recorded as a knowledge gap;
+    * ``None`` otherwise, so an arithmetic question or small talk neither
+      gets unrelated passages nor counts as a gap.
+    """
+    from cognivore.ml.insight import retrieval_confidence
+    from cognivore.ml.intent import looks_like_knowledge_question
+    from cognivore.tools.rag_search import format_hits
+
+    def provide(question: str) -> str | None:
+        if len(store) == 0 or not question.strip():
+            return None
+        hits = store.search_multi([question], top_k=top_k + 2)
+        if retrieval_confidence(question, hits) < settings.auto_context_threshold:
+            return "" if looks_like_knowledge_question(question) else None
+        # Only passages close to the best match. Live finding: a refund
+        # question also pulled in the SLA section (it says "100% refund per
+        # month") at half the best score, and a 3B model blended the two
+        # into one wrong sentence that still looked well grounded.
+        best = hits[0].score
+        relevant = [h for h in hits if h.score >= settings.auto_context_relative_score * best]
+        return format_hits(relevant, question, top_k=top_k)
+
+    return provide
+
+
 def build_agent(
     settings: Settings,
     store: DocumentStore | None = None,
@@ -271,11 +308,22 @@ def build_agent(
     include_media: bool = True,
     use_vector_memory: bool = True,
 ) -> Agent:
-    store = store or build_document_store(settings)
-    llm = llm or build_llm_backend(settings)
+    # `is None`, not `or`: an *empty* DocumentStore is falsy (it has
+    # __len__), and `store or ...` used to silently swap a fresh, empty
+    # store for a separate one -- documents ingested through the web API
+    # then went into a store the agent never searched.
+    store = store if store is not None else build_document_store(settings)
+    llm = llm if llm is not None else build_llm_backend(settings)
     tools = build_tool_registry(store, settings, include_media=include_media)
     vector_memory = (
         VectorMemory(store.embedder, settings.use_approximate_index) if use_vector_memory else None
+    )
+    # The offline demo backend routes questions to the search tool itself;
+    # auto-context is for real models.
+    context_provider = (
+        build_context_provider(store, settings)
+        if settings.auto_context and not isinstance(llm, FakeLLMBackend)
+        else None
     )
     return Agent(
         llm=llm,
@@ -286,4 +334,6 @@ def build_agent(
         ),
         conversation=ConversationBuffer(),
         vector_memory=vector_memory,
+        context_provider=context_provider,
+        strict_knowledge_answers=settings.strict_knowledge_answers,
     )

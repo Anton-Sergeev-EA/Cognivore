@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from cognivore.rag.snippets import best_snippet, split_sentences
+from cognivore.rag.snippets import best_snippet, distinct_snippets, split_sentences
 
 _LONG = (
     "About the company. Skylark Cloud hosts video for online courses. "
@@ -62,3 +62,20 @@ def test_snippet_does_not_open_with_the_preceding_section() -> None:
     )
     snippet = best_snippet(text, "What is the refund policy?", limit=120)
     assert snippet.startswith("## Refund policy")
+
+
+def test_distinct_snippets_drop_repeated_passages() -> None:
+    from cognivore.rag.store import RetrievedChunk
+
+    def hit(i: int, text: str) -> RetrievedChunk:
+        return RetrievedChunk(i, text, "kb.md", 1.0 - i / 10, 0.5, 0.5)
+
+    refund = "## Refund policy\nA full refund is available within 14 days."
+    hits = [
+        hit(1, "Pricing plans are listed below. " + refund),
+        hit(2, refund + " Plans can be paused."),  # overlapping neighbour chunk
+        hit(3, "## SLA\nUptime is 99.9 percent."),
+    ]
+    kept = distinct_snippets(hits, "What is the refund policy?", limit=60)
+    assert [h.id for h, _ in kept] == [1, 3]
+    assert len(distinct_snippets(hits, "refund policy", limit=60, top_k=1)) == 1

@@ -279,3 +279,116 @@ def test_new_static_assets_are_served(client: TestClient) -> None:
     res = client.get("/cortex.js")
     assert res.status_code == 200
     assert res.headers.get("cache-control") == "no-store"
+
+
+def test_auto_context_explains_an_answer_given_without_calling_search(
+    seeded_client: TestClient,
+) -> None:
+    # The live failure this guards against: qwen2.5:3b answered a knowledge
+    # question straight away, never calling search_knowledge_base, and
+    # invented details -- so the UI had no sources and no grounding to show.
+    from cognivore.bootstrap import build_context_provider
+
+    class _NoSearchLLM:
+        def generate(self, messages, config):
+            return (
+                "Final Answer: A full refund is available within 14 days of the first "
+                "payment. You must fill in a special form on our website."
+            )
+
+        def stream(self, messages, config):
+            yield self.generate(messages, config)
+
+    app = seeded_client.app
+    app.state.agent.llm = _NoSearchLLM()
+    app.state.agent.context_provider = build_context_provider(app.state.store, app.state.settings)
+    body = seeded_client.post("/api/chat", json={"message": "What is the refund policy?"}).json()
+
+    assert body["trace"][0]["action"] == "search_knowledge_base"
+    insight = body["insight"]
+    assert insight["used_knowledge_base"]
+    assert insight["hits"][0]["source"].endswith("(EN)")
+    supported, invented = insight["grounding"]["sentences"]
+    assert supported["support"] >= 0.35
+    assert invented["support"] < 0.35  # the made-up "special form" gets underlined
+
+
+def test_documents_ingested_into_a_fresh_empty_store_are_searchable(client: TestClient) -> None:
+    # Regression test: an empty store is falsy, and build_agent's old
+    # `store or build_document_store(...)` gave the agent a separate store,
+    # so documents uploaded to a fresh install were never found in chat.
+    assert client.app.state.agent.tools.get("search_knowledge_base").store is (
+        client.app.state.store
+    )
+    files = {"file": ("notes.md", b"The launch code is banana42.", "text/markdown")}
+    client.post("/api/ingest/file", files=files)
+    body = client.post(
+        "/api/chat", json={"message": "search the knowledge base for the launch code"}
+    ).json()
+    assert "banana42" in body["answer"]
+
+
+def test_real_model_gap_question_is_recorded_and_shows_no_fake_sources(
+    seeded_client: TestClient,
+) -> None:
+    # Live finding with qwen2.5:3b: for a question the knowledge base can't
+    # answer, the model either told the user to "search the internet",
+    # relayed an "unknown tool" error, or answered with its own
+    # meta-reasoning. In strict mode (the default) Cognivore answers such a
+    # question itself, without calling the model.
+    from cognivore.bootstrap import build_context_provider
+
+    class _MustNotBeCalled:
+        calls = 0
+
+        def generate(self, messages, config):
+            _MustNotBeCalled.calls += 1
+            return "Final Answer: made up"
+
+        def stream(self, messages, config):
+            yield self.generate(messages, config)
+
+    app = seeded_client.app
+    app.state.agent.llm = _MustNotBeCalled()
+    app.state.agent.context_provider = build_context_provider(app.state.store, app.state.settings)
+    assert app.state.agent.strict_knowledge_answers
+    question = "Есть ли у вас мобильное приложение для iPhone?"
+    with seeded_client.stream("GET", "/api/chat/stream", params={"message": question}) as res:
+        events = _sse_events(res.read().decode())
+
+    assert _MustNotBeCalled.calls == 0
+    assert events["answer_final"] == ["В базе знаний нет информации об этом."]
+    assert json.loads(events["trace"][0])["observation"] == "No relevant passages found."
+    insight = json.loads(events["insight"][0])
+    assert insight["gap"] is True
+    assert insight["hits"] == [] and insight["grounding"] is None
+    assert [g["query"] for g in seeded_client.get("/api/insights/gaps").json()] == [question]
+
+
+def test_non_strict_mode_tells_the_model_the_knowledge_base_has_nothing(
+    seeded_client: TestClient,
+) -> None:
+    from cognivore.bootstrap import build_context_provider
+
+    class _HonestLLM:
+        system = ""
+
+        def generate(self, messages, config):
+            _HonestLLM.system = "\n".join(m.content for m in messages if m.role == "system")
+            return "Final Answer: The knowledge base has no information about a mobile app."
+
+        def stream(self, messages, config):
+            yield self.generate(messages, config)
+
+    agent = seeded_client.app.state.agent
+    agent.llm = _HonestLLM()
+    agent.strict_knowledge_answers = False
+    agent.context_provider = build_context_provider(
+        seeded_client.app.state.store, seeded_client.app.state.settings
+    )
+    body = seeded_client.post(
+        "/api/chat", json={"message": "Do you have a mobile app for iPhone?"}
+    ).json()
+    assert "contains nothing about it" in _HonestLLM.system
+    assert body["answer"].startswith("The knowledge base has no information")
+    assert body["insight"]["gap"] is True

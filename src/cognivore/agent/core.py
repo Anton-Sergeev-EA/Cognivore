@@ -6,14 +6,17 @@ a :class:`~cognivore.tools.base.ToolRegistry`.
 from __future__ import annotations
 
 import re
-from collections.abc import Generator, Iterator
+from collections.abc import Callable, Generator, Iterator
 from dataclasses import dataclass, field
 
 from cognivore.agent.memory import ConversationBuffer, VectorMemory
 from cognivore.agent.parsing import AgentStep, parse_step
 from cognivore.agent.prompts import build_system_prompt
+from cognivore.agent.replies import not_in_knowledge_base
 from cognivore.llm.base import ChatMessage, GenerationConfig, LLMBackend
+from cognivore.ml.lang import LANGUAGE_NAMES, detect_language_confident
 from cognivore.tools.base import ToolRegistry
+from cognivore.tools.rag_search import NOTHING_FOUND
 
 # Cheap presence/position checks used only to decide, *while tokens are
 # still streaming in*, whether the model has started its "Final Answer:"
@@ -25,6 +28,13 @@ from cognivore.tools.base import ToolRegistry
 # how much appears to stream live, never correctness.
 _FINAL_MARKER_RE = re.compile(r"Final Answer:\s*", re.I)
 _ACTION_MARKER_RE = re.compile(r"\bAction:\s*", re.I)
+
+SEARCH_TOOL = "search_knowledge_base"
+
+# For a user message: formatted knowledge-base passages; "" when the
+# knowledge base was searched and has nothing on it; None when a lookup
+# doesn't apply (see bootstrap.build_context_provider).
+ContextProvider = Callable[[str], str | None]
 
 
 @dataclass
@@ -51,6 +61,8 @@ class Agent:
         generation_config: GenerationConfig | None = None,
         conversation: ConversationBuffer | None = None,
         vector_memory: VectorMemory | None = None,
+        context_provider: ContextProvider | None = None,
+        strict_knowledge_answers: bool = False,
     ) -> None:
         self.llm = llm
         self.tools = tools
@@ -58,9 +70,32 @@ class Agent:
         self.generation_config = generation_config or GenerationConfig()
         self.conversation = conversation or ConversationBuffer()
         self.vector_memory = vector_memory
+        self.context_provider = context_provider
+        # When the knowledge base was searched for a question and has nothing
+        # on it, answer "not in the knowledge base" directly instead of
+        # asking the model. Live testing: told exactly that, a 3B model
+        # still answered with its own meta-reasoning ("I must tell the user
+        # that...") or a garbled tool call about half the time.
+        self.strict_knowledge_answers = strict_knowledge_answers
         self.system_prompt = build_system_prompt(tools, max_steps)
 
-    def run(self, user_input: str) -> AgentResult:
+    def _prepare(self, user_input: str) -> tuple[list[ChatMessage], list[TraceEntry], str | None]:
+        """Builds the prompt for a turn, plus any trace steps that happened
+        before the model was called.
+
+        Two things are done here rather than left to the model, because
+        live testing showed small local models (3B) skipping them:
+
+        * **Retrieval.** Given a ``context_provider``, relevant knowledge-base
+          passages are put in front of the model up front, instead of
+          hoping it decides to call ``search_knowledge_base`` -- a 3B model
+          frequently answered from its own guesses without ever searching.
+          The lookup is recorded as a normal search step, so the trace and
+          the explainability layer see it like any other tool call.
+        * **Answer language.** The model is told the language by name;
+          a generic "same language as the user" rule wasn't enough to stop
+          a Qwen model from drifting into Chinese mid-sentence.
+        """
         recalled = self.vector_memory.recall(user_input) if self.vector_memory else []
         messages: list[ChatMessage] = [ChatMessage(role="system", content=self.system_prompt)]
         if recalled:
@@ -68,10 +103,91 @@ class Agent:
             messages.append(
                 ChatMessage(role="system", content=f"Relevant memory from earlier:\n{memory_block}")
             )
+
+        pre_trace: list[TraceEntry] = []
+        direct_answer: str | None = None
+        passages = self.context_provider(user_input) if self.context_provider else None
+        if passages == "" and self.strict_knowledge_answers:
+            pre_trace.append(
+                TraceEntry(
+                    thought="Searched the knowledge base before answering.",
+                    action=SEARCH_TOOL,
+                    action_input={"query": user_input},
+                    observation=NOTHING_FOUND,
+                )
+            )
+            direct_answer = not_in_knowledge_base(user_input)
+        elif passages == "":
+            # Searched, and the knowledge base has nothing on this. Saying so
+            # explicitly: left to itself, a small model either guessed or
+            # told the user to go search the internet.
+            messages.append(
+                ChatMessage(
+                    role="system",
+                    content=(
+                        "The knowledge base was searched for the user's next message and "
+                        "contains nothing about it. Tell the user plainly that the "
+                        "knowledge base has no information on this. Do not guess, do not "
+                        "invent an answer, and do not tell them to search elsewhere."
+                    ),
+                )
+            )
+            pre_trace.append(
+                TraceEntry(
+                    thought="Searched the knowledge base before answering.",
+                    action=SEARCH_TOOL,
+                    action_input={"query": user_input},
+                    observation=NOTHING_FOUND,
+                )
+            )
+        elif passages:
+            messages.append(
+                ChatMessage(
+                    role="system",
+                    content=(
+                        "Passages retrieved from the knowledge base for the user's next "
+                        f"message:\n\n{passages}\n\n"
+                        "Base your Final Answer on these passages and keep every number, "
+                        "condition and limit they state. Use only the passages that are "
+                        "about what the user asked; ignore the others, and never combine "
+                        "facts from different topics into one statement. If the passages "
+                        "don't answer the question, say that the knowledge base doesn't "
+                        "cover it. Never add details that are not in the passages. Don't "
+                        "name or cite the passages or their sources in the answer: the "
+                        "interface already shows them next to it."
+                    ),
+                )
+            )
+            pre_trace.append(
+                TraceEntry(
+                    thought="Searched the knowledge base before answering.",
+                    action=SEARCH_TOOL,
+                    action_input={"query": user_input},
+                    observation=passages,
+                )
+            )
+
+        language = detect_language_confident(user_input)
+        if language is not None:
+            name = LANGUAGE_NAMES[language]
+            messages.append(
+                ChatMessage(
+                    role="system",
+                    content=f"The user writes in {name}. Write the Final Answer entirely in "
+                    f"{name}, without switching to any other language.",
+                )
+            )
+
         messages.extend(self.conversation.as_list())
         messages.append(ChatMessage(role="user", content=user_input))
+        return messages, pre_trace, direct_answer
 
-        trace: list[TraceEntry] = []
+    def run(self, user_input: str) -> AgentResult:
+        messages, trace, direct_answer = self._prepare(user_input)
+        if direct_answer is not None:
+            trace.append(TraceEntry("Answered without the model.", None, {}, None))
+            self._remember_turn(user_input, direct_answer)
+            return AgentResult(answer=direct_answer, trace=trace)
         for _step_num in range(self.max_steps):
             completion = self.llm.generate(messages, self.generation_config)
             step: AgentStep = parse_step(completion)
@@ -117,17 +233,15 @@ class Agent:
         live chunks of the final answer as they stream in, and finally
         ``("final", AgentResult)`` once the whole turn is done.
         """
-        recalled = self.vector_memory.recall(user_input) if self.vector_memory else []
-        messages: list[ChatMessage] = [ChatMessage(role="system", content=self.system_prompt)]
-        if recalled:
-            memory_block = "\n".join(f"- {m}" for m in recalled)
-            messages.append(
-                ChatMessage(role="system", content=f"Relevant memory from earlier:\n{memory_block}")
-            )
-        messages.extend(self.conversation.as_list())
-        messages.append(ChatMessage(role="user", content=user_input))
-
-        trace: list[TraceEntry] = []
+        messages, trace, direct_answer = self._prepare(user_input)
+        for entry in trace:
+            yield ("trace", entry)
+        if direct_answer is not None:
+            trace.append(TraceEntry("Answered without the model.", None, {}, None))
+            self._remember_turn(user_input, direct_answer)
+            yield ("answer_delta", direct_answer)
+            yield ("final", AgentResult(answer=direct_answer, trace=trace))
+            return
         for _step_num in range(self.max_steps):
             completion = yield from self._stream_step(messages)
             step: AgentStep = parse_step(completion)

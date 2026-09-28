@@ -11,7 +11,7 @@ from cognivore.ml.gaps import KnowledgeGapTracker
 from cognivore.ml.grounding import GroundingReport, assess_grounding
 from cognivore.ml.knowledge_map import KnowledgeMapBuilder, preview
 from cognivore.ml.lang import detect_language
-from cognivore.rag.snippets import best_snippet
+from cognivore.rag.snippets import distinct_snippets
 from cognivore.rag.store import DocumentStore, RetrievedChunk
 from cognivore.rag.tokenize import STOPWORDS, content_tokens, is_cjk_run, tokenize
 
@@ -109,19 +109,24 @@ def build_turn_insight(
         return insight
 
     queries = list(dict.fromkeys(q for q in [*tool_queries, question] if q.strip()))
-    hits = store.search_multi(queries, top_k=top_k)
+    # Over-fetch, then drop passages that merely repeat another one
+    # (overlapping neighbour chunks), so the source list shows distinct
+    # evidence and grounding ranks refer to what the user sees.
+    candidates = store.search_multi(queries, top_k=top_k + 3)
+    distinct = distinct_snippets(candidates, question, limit=260, top_k=top_k)
+    hits = [hit for hit, _ in distinct]
     insight.queries = queries
     insight.hits = [
         InsightHit(
             rank=i,
             id=h.id,
             source=h.source,
-            preview=preview(best_snippet(h.text, question, limit=260), 220),
+            preview=preview(snippet, 220),
             score=round(h.score, 4),
             vector_score=round(h.vector_score, 4),
             lexical_score=round(h.lexical_score, 4),
         )
-        for i, h in enumerate(hits, start=1)
+        for i, (h, snippet) in enumerate(distinct, start=1)
     ]
     insight.confidence = retrieval_confidence(question, hits)
 
@@ -129,8 +134,20 @@ def build_turn_insight(
         kmap = map_builder.get()
         insight.query_point = kmap.project(store.embed_query(question))
 
+    gap_threshold = gap_tracker.threshold if gap_tracker is not None else 0.3
+    if used_knowledge_base and insight.confidence < gap_threshold:
+        # Nothing relevant was found: the "sources" are merely the least
+        # unrelated chunks, and measuring the answer against them (or
+        # drawing beams to them) would suggest evidence that isn't there.
+        insight.gap = (
+            gap_tracker.observe(question, insight.confidence, language)
+            if gap_tracker is not None
+            else True
+        )
+        insight.hits = []
+        return insight
     if used_knowledge_base:
-        insight.grounding = assess_grounding(answer, [h.text for h in hits], store.embedder)
-        if gap_tracker is not None:
-            insight.gap = gap_tracker.observe(question, insight.confidence, language)
+        insight.grounding = assess_grounding(
+            answer, [h.text for h in hits], store.embedder, sources=[h.source for h in hits]
+        )
     return insight

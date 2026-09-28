@@ -93,6 +93,11 @@ ignore = ["E501"]
 # (RUF001), and space-separated word strings read far better than
 # hundred-element list literals (SIM905).
 "src/cognivore/rag/tokenize.py" = ["RUF001", "SIM905"]
+# Question and arithmetic markers in the UI languages (？, ×) are meant.
+"src/cognivore/ml/intent.py" = ["RUF001"]
+# Offline-demo and built-in replies in the nine UI languages.
+"src/cognivore/llm/fake_backend.py" = ["RUF001"]
+"src/cognivore/agent/replies.py" = ["RUF001"]
 # Tests exercise Russian and Chinese input on purpose; CJK punctuation
 # (？ ： ，) in those fixtures is the real thing, not a typo.
 "tests/*" = ["RUF001"]

@@ -96,6 +96,35 @@ class Settings(BaseSettings):
         description="Most chunks drawn on the knowledge map; larger stores are sampled.",
     )
 
+    auto_context: bool = Field(
+        default=True,
+        description="Before each turn, search the knowledge base and hand relevant passages "
+        "to the model up front, instead of relying on the model to call the search tool "
+        "itself (small local models often don't). Not applied to the offline demo backend, "
+        "which does its own routing.",
+    )
+    auto_context_threshold: float = Field(
+        default=0.3,
+        ge=0.0,
+        le=1.0,
+        description="Minimum retrieval confidence for auto_context to add passages; below "
+        "it the model gets no passages (and may still search on its own).",
+    )
+    strict_knowledge_answers: bool = Field(
+        default=True,
+        description="When auto_context searched the knowledge base for a question and found "
+        "nothing, answer 'the knowledge base has no information about this' (in the "
+        "question's language) directly instead of letting the model answer from its general "
+        "knowledge. Set to false to let the model answer anyway.",
+    )
+    auto_context_relative_score: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="auto_context only passes passages scoring at least this fraction of the "
+        "best passage's score, so loosely related sections can't be blended into an answer.",
+    )
+
     # -- Agent -----------------------------------------------------------
     max_agent_steps: int = Field(default=6, ge=1)
 

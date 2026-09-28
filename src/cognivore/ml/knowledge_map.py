@@ -89,7 +89,12 @@ def build_knowledge_map(
     x = _normalize_rows(matrix.astype(np.float64))
     projection = fit_pca_2d(x)
     coords = projection.transform(x)
-    result, silhouette = auto_kmeans(x, seed=seed)
+    # With a multilingual embedder, the same content in nine languages sits
+    # together, and silhouette alone tends to settle on 2 very broad topics
+    # for a knowledge base of a hundred-plus chunks; asking for at least 3
+    # topics there keeps the map informative.
+    k_min = 3 if len(ids) >= 40 else 2
+    result, silhouette = auto_kmeans(x, k_min=k_min, seed=seed)
     labels = [int(label) for label in result.labels]
 
     texts: list[str] = []

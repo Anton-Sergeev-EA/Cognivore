@@ -29,6 +29,7 @@ class SentenceSupportOut(BaseModel):
     end: int
     support: float
     source_rank: int | None
+    citation: bool = False
 
 
 class GroundingOut(BaseModel):

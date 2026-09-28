@@ -184,3 +184,166 @@ def test_offline_demo_understands_percentages() -> None:
 def test_offline_demo_does_not_call_search_when_it_is_not_registered() -> None:
     result = _build_agent().run("What is the capital of France?")
     assert all(t.action is None for t in result.trace)
+
+
+class _RecordingLLM:
+    """Answers immediately (never calls a tool) and remembers its prompt --
+    the behaviour observed live from a 3B model."""
+
+    def __init__(self, answer: str = "Final Answer: ok") -> None:
+        self.answer = answer
+        self.messages: list = []
+
+    def generate(self, messages, config):
+        self.messages = list(messages)
+        return self.answer
+
+    def stream(self, messages, config):
+        yield self.generate(messages, config)
+
+
+def _system_text(llm: _RecordingLLM) -> str:
+    return "\n".join(m.content for m in llm.messages if m.role == "system")
+
+
+def test_context_provider_puts_passages_in_front_of_the_model() -> None:
+    llm = _RecordingLLM()
+    agent = Agent(
+        llm=llm,
+        tools=ToolRegistry([CalculatorTool()]),
+        context_provider=lambda q: "[1] (policy.md) Full refund within 14 days.",
+    )
+    result = agent.run("What is the refund policy?")
+    assert "Full refund within 14 days." in _system_text(llm)
+    # Recorded as a normal search step, so the UI and insight layer see it.
+    assert result.trace[0].action == "search_knowledge_base"
+    assert result.trace[0].observation == "[1] (policy.md) Full refund within 14 days."
+
+
+def test_context_provider_returning_none_adds_nothing() -> None:
+    llm = _RecordingLLM()
+    agent = Agent(llm=llm, tools=ToolRegistry([CalculatorTool()]), context_provider=lambda q: None)
+    result = agent.run("What is 6 * 7?")
+    assert "Passages retrieved" not in _system_text(llm)
+    assert all(t.action is None for t in result.trace)
+
+
+def test_run_stream_emits_the_auto_search_step_first() -> None:
+    agent = Agent(
+        llm=_RecordingLLM(),
+        tools=ToolRegistry([CalculatorTool()]),
+        context_provider=lambda q: "[1] (a.md) text",
+    )
+    events = list(agent.run_stream("What is the refund policy?"))
+    assert events[0][0] == "trace"
+    assert events[0][1].action == "search_knowledge_base"
+
+
+def test_answer_language_is_named_explicitly() -> None:
+    for question, name in [
+        ("Какая политика возврата средств?", "Russian"),
+        ("¿Cuál es la política de reembolso?", "Spanish"),
+        ("Wie lautet die Rückerstattungsrichtlinie?", "German"),
+        ("退款政策是什么？", "Chinese"),
+    ]:
+        llm = _RecordingLLM()
+        Agent(llm=llm, tools=ToolRegistry([CalculatorTool()])).run(question)
+        assert f"entirely in {name}" in _system_text(llm), question
+
+
+def test_no_language_instruction_without_a_clear_signal() -> None:
+    llm = _RecordingLLM()
+    Agent(llm=llm, tools=ToolRegistry([CalculatorTool()])).run("12 * 7")
+    assert "entirely in" not in _system_text(llm)
+
+
+def test_empty_lookup_tells_the_model_the_knowledge_base_has_nothing() -> None:
+    llm = _RecordingLLM()
+    agent = Agent(llm=llm, tools=ToolRegistry([CalculatorTool()]), context_provider=lambda q: "")
+    result = agent.run("Do you have a mobile app for iPhone?")
+    assert "contains nothing about it" in _system_text(llm)
+    assert "do not tell them to search elsewhere" in _system_text(llm)
+    assert result.trace[0].action == "search_knowledge_base"
+    assert result.trace[0].observation == "No relevant passages found."
+
+
+def test_search_tool_reports_nothing_found_instead_of_unrelated_passages() -> None:
+    store = DocumentStore(embedder=HashingEmbedder(dim=64))
+    store.add_text("A full refund is available within 14 days of the first payment.", "p.md")
+    strict = RagSearchTool(store, min_confidence=0.3)
+    assert strict.run(query="mobile app for iPhone") == "No relevant passages found."
+    assert "14 days" in strict.run(query="refund policy")
+    # Without a threshold (the default) the tool keeps returning its best hits.
+    assert "14 days" in RagSearchTool(store).run(query="mobile app for iPhone")
+
+
+def test_final_answer_written_as_a_tool_call_is_still_the_final_answer() -> None:
+    # Live finding with qwen2.5:3b: "Action: Final Answer" used to be
+    # dispatched as a tool, and the model relayed the resulting
+    # "unknown tool" error to the user as its answer.
+    cases = [
+        (
+            'Thought: none\nAction: Final Answer\nAction Input: {"answer": "Нет информации."}',
+            "Нет информации.",
+        ),
+        (
+            "Action: final_answer\nAction Input: The knowledge base has nothing on this.",
+            "The knowledge base has nothing on this.",
+        ),
+        ('Action: Final Answer\nAction Input: "Plain JSON string."', "Plain JSON string."),
+        (
+            'Action: `Final Answer:`\nAction Input: {"response": "Via another key."}',
+            "Via another key.",
+        ),
+    ]
+    for completion, expected in cases:
+        step = parse_step(completion)
+        assert step.is_final, completion
+        assert step.final_answer == expected
+
+
+def test_agent_does_not_relay_an_unknown_tool_error_for_a_final_answer_call() -> None:
+    class _ConfusedLLM:
+        def generate(self, messages, config):
+            return (
+                "Thought: The knowledge base has nothing.\nAction: Final Answer\n"
+                'Action Input: {"answer": "В базе знаний нет информации об этом."}'
+            )
+
+        def stream(self, messages, config):
+            yield self.generate(messages, config)
+
+    result = Agent(llm=_ConfusedLLM(), tools=ToolRegistry([CalculatorTool()])).run("Вопрос?")
+    assert result.answer == "В базе знаний нет информации об этом."
+    assert all(t.action is None for t in result.trace)
+
+
+def test_strict_mode_answers_an_empty_lookup_without_the_model() -> None:
+    llm = _RecordingLLM()
+    agent = Agent(
+        llm=llm,
+        tools=ToolRegistry([CalculatorTool()]),
+        context_provider=lambda q: "",
+        strict_knowledge_answers=True,
+    )
+    result = agent.run("Есть ли у вас мобильное приложение?")
+    assert result.answer == "В базе знаний нет информации об этом."
+    assert llm.messages == []  # the model was never called
+    assert result.trace[0].action == "search_knowledge_base"
+
+    events = list(agent.run_stream("Gibt es eine Handy-App?"))
+    deltas = "".join(p for kind, p in events if kind == "answer_delta")
+    assert deltas == "Die Wissensbasis enthält dazu keine Informationen."
+    assert events[-1][0] == "final"
+
+
+def test_strict_mode_still_uses_the_model_when_passages_were_found() -> None:
+    llm = _RecordingLLM("Final Answer: 14 days.")
+    agent = Agent(
+        llm=llm,
+        tools=ToolRegistry([CalculatorTool()]),
+        context_provider=lambda q: "[1] (p.md) Full refund within 14 days.",
+        strict_knowledge_answers=True,
+    )
+    assert agent.run("What is the refund policy?").answer == "14 days."
+    assert llm.messages

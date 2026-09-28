@@ -6,9 +6,11 @@ from __future__ import annotations
 
 from typing import Any, ClassVar
 
-from cognivore.rag.snippets import best_snippet
-from cognivore.rag.store import DocumentStore
+from cognivore.rag.snippets import distinct_snippets
+from cognivore.rag.store import DocumentStore, RetrievedChunk
 from cognivore.tools.base import Tool
+
+NOTHING_FOUND = "No relevant passages found."
 
 
 class RagSearchTool(Tool):
@@ -35,8 +37,13 @@ class RagSearchTool(Tool):
         "required": ["query"],
     }
 
-    def __init__(self, store: DocumentStore) -> None:
+    def __init__(self, store: DocumentStore, min_confidence: float = 0.0) -> None:
         self.store = store
+        # Below this retrieval confidence the tool reports that nothing was
+        # found instead of returning the least-unrelated chunks: handing a
+        # model the "best" of several irrelevant passages invites it to
+        # answer from them (see cognivore.ml.insight.retrieval_confidence).
+        self.min_confidence = min_confidence
 
     def run(self, query: str = "", top_k: int = 3, _user_input: str = "", **_: object) -> str:
         if len(self.store) == 0:
@@ -45,16 +52,31 @@ class RagSearchTool(Tool):
         # see DocumentStore.search_multi for why: the model's own `query`
         # is sometimes translated/rewritten in a way that no longer
         # lexically matches the ingested documents.
-        hits = self.store.search_multi([query, _user_input], top_k=top_k)
+        # Over-fetch a little: format_hits drops passages that repeat one
+        # another (overlapping neighbour chunks).
+        hits = self.store.search_multi([query, _user_input], top_k=top_k + 2)
         if not hits:
-            return "No relevant passages found."
-        lines = []
-        for i, hit in enumerate(hits, start=1):
-            # Shorter snippets keep the Observation text (which the model
-            # re-reads on its very next, slowest-so-far call) from adding
-            # unnecessary prefill time on CPU-only inference.
-            # The part of the chunk that matches the question, not just
-            # its first 300 characters (see cognivore.rag.snippets).
-            snippet = best_snippet(hit.text, f"{query} {_user_input}", limit=300)
-            lines.append(f"[{i}] ({hit.source}) {snippet}")
-        return "\n\n".join(lines)
+            return NOTHING_FOUND
+        if self.min_confidence > 0:
+            from cognivore.ml.insight import retrieval_confidence
+
+            confidence = max(
+                retrieval_confidence(q, hits) for q in (query, _user_input) if q.strip()
+            )
+            if confidence < self.min_confidence:
+                return NOTHING_FOUND
+        return format_hits(hits, f"{query} {_user_input}", top_k=top_k)
+
+
+def format_hits(hits: list[RetrievedChunk], query: str, top_k: int | None = None) -> str:
+    """Formats retrieved chunks the way the model sees them:
+    ``[n] (source) snippet`` blocks. Snippets are kept short, because the
+    model re-reads them on every following call and prefill on CPU-only
+    inference is slow; they show the part of each chunk that matches the
+    question (see cognivore.rag.snippets)."""
+    return "\n\n".join(
+        f"[{i}] ({hit.source}) {snippet}"
+        for i, (hit, snippet) in enumerate(
+            distinct_snippets(hits, query, limit=300, top_k=top_k), start=1
+        )
+    )

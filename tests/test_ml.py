@@ -147,6 +147,10 @@ def test_grounding_is_not_applicable_without_passages() -> None:
         ("API 限额是多少", "zh"),
         ("12 * 7", "en"),
         ("रिफ़ंड नीति क्या है?", "hi"),
+        ("¿Cuál es la política de reembolso?", "es"),
+        ("Quelle est la politique de remboursement ?", "fr"),
+        ("Wie lautet die Rückerstattungsrichtlinie?", "de"),
+        ("Qual è la politica di rimborso?", "it"),
         ("返金ポリシーは？", "ja"),
     ],
 )
@@ -257,3 +261,81 @@ def test_turn_insight_skips_grounding_when_no_search_was_used(demo_store: Docume
     )
     assert insight.grounding is None
     assert not insight.gap
+
+
+def test_a_sentence_naming_the_source_is_a_citation_not_an_unsupported_claim() -> None:
+    embedder = HashingEmbedder(dim=256)
+    passages = [
+        "Refund policy: a full refund is available within 14 days of the first payment.",
+        "SLA: guaranteed uptime is 99.9 percent.",
+    ]
+    sources = ["Skylark Cloud demo knowledge base (EN)", "NordCloud demo knowledge base (RU)"]
+    for answer, cite in [
+        (
+            "A full refund is available within 14 days. "
+            "This information is from (Skylark Cloud demo knowledge base (EN)).",
+            "en",
+        ),
+        (
+            "Полный возврат возможен в течение 14 дней. "
+            "Это информация из (Skylark Cloud демонстрационной базы знаний (EN)).",
+            "ru",
+        ),
+    ]:
+        report = assess_grounding(answer, passages, embedder, sources=sources)
+        assert report is not None
+        last = report.sentences[-1]
+        assert last.citation, cite
+        assert last.source_rank == 1
+        assert last.support >= 0.35  # never underlined
+
+
+def test_a_real_claim_that_mentions_the_source_is_still_checked() -> None:
+    embedder = HashingEmbedder(dim=256)
+    report = assess_grounding(
+        "Skylark Cloud gives every customer free lifetime storage and a personal robot butler.",
+        ["Refund policy: a full refund is available within 14 days of the first payment."],
+        embedder,
+        sources=["Skylark Cloud demo knowledge base (EN)"],
+    )
+    assert report is not None
+    assert not report.sentences[0].citation
+    assert report.sentences[0].support < 0.35
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Do you have a mobile app for iPhone?", True),
+        ("Есть ли у вас мобильное приложение для iPhone?", True),
+        ("你们有苹果手机应用吗？", True),
+        ("Gibt es eine Handy-App für das iPhone?", True),
+        ("What is 15% of 149?", False),
+        ("Сколько будет 15% от 4900?", False),
+        ("12 * 7", False),
+        ("How are you?", False),
+        ("Привет", False),
+    ],
+)
+def test_looks_like_knowledge_question(text: str, expected: bool) -> None:
+    from cognivore.ml.intent import looks_like_knowledge_question
+
+    assert looks_like_knowledge_question(text) is expected
+
+
+def test_a_gap_carries_no_misleading_sources_or_grounding(
+    demo_store: DocumentStore, tmp_path: Path
+) -> None:
+    insight = build_turn_insight(
+        demo_store,
+        question="Do you support Kubernetes operators?",
+        answer="The knowledge base has no information on Kubernetes operators.",
+        tool_queries=[],
+        used_knowledge_base=True,
+        map_builder=KnowledgeMapBuilder(demo_store),
+        gap_tracker=KnowledgeGapTracker(tmp_path / "gaps.json"),
+    )
+    assert insight.gap
+    assert insight.hits == []
+    assert insight.grounding is None
+    assert insight.query_point is not None  # the question is still placed on the map
