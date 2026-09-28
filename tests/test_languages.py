@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import re
-from pathlib import Path
+from importlib.resources import files
 
 import pytest
 from fastapi.testclient import TestClient
@@ -15,7 +15,9 @@ from fastapi.testclient import TestClient
 from cognivore.config import Settings
 from cognivore.web.app import create_app
 
-_I18N = (Path(__file__).parent.parent / "src/cognivore/web/static/i18n.js").read_text("utf-8")
+# Read the bundle from the installed package, so the test also works
+# against a built wheel and not only against a source checkout.
+_I18N = files("cognivore.web").joinpath("static/i18n.js").read_text("utf-8")
 LANGS = json.loads(re.search(r"SUPPORTED_LANGS = (\[.*?\]);", _I18N).group(1))  # type: ignore[union-attr]
 
 
