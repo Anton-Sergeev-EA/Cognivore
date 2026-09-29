@@ -89,3 +89,27 @@ def test_unanswerable_question_is_a_gap_in_every_language(client: TestClient, la
     # not the least-unrelated passage presented as an answer.
     assert body["answer"].strip() == NOT_IN_KNOWLEDGE_BASE[lang], lang
     assert insight["hits"] == [] and insight["grounding"] is None
+
+
+@pytest.fixture(scope="module")
+def empty_client(tmp_path_factory: pytest.TempPathFactory) -> TestClient:
+    settings = Settings(
+        data_dir=tmp_path_factory.mktemp("empty"),
+        prefer_semantic_embedder=False,
+        seed_demo_kb=False,
+    )
+    return TestClient(create_app(settings))
+
+
+@pytest.mark.parametrize("lang", LANGS)
+def test_empty_knowledge_base_is_reported_in_every_language(
+    empty_client: TestClient, lang: str
+) -> None:
+    """Asking before anything was added: the reply says so in the user's
+    language (it used to be a fixed English sentence in every UI language)."""
+    from cognivore.agent.replies import EMPTY_KNOWLEDGE_BASE
+
+    assert set(EMPTY_KNOWLEDGE_BASE) == set(LANGS)
+    question = next(q for q in _examples(lang) if not any(ch.isdigit() for ch in q))
+    body = empty_client.post("/api/chat", json={"message": question}).json()
+    assert body["answer"].strip() == EMPTY_KNOWLEDGE_BASE[lang], (lang, question)

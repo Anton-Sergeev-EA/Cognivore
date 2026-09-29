@@ -47,7 +47,13 @@ class RagSearchTool(Tool):
 
     def run(self, query: str = "", top_k: int = 3, _user_input: str = "", **_: object) -> str:
         if len(self.store) == 0:
-            return "The knowledge base is empty. No documents have been ingested yet."
+            # Imported here: cognivore.agent imports this module, so a
+            # top-level import would be circular.
+            from cognivore.agent.replies import empty_knowledge_base
+
+            # In the user's language -- in the offline demo this text is
+            # shown to them as the answer verbatim.
+            return empty_knowledge_base(_user_input or query)
         # Also try the user's own, unmodified wording of the question --
         # see DocumentStore.search_multi for why: the model's own `query`
         # is sometimes translated/rewritten in a way that no longer
