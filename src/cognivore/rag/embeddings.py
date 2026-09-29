@@ -21,7 +21,7 @@ from typing import Protocol, runtime_checkable
 
 import numpy as np
 
-from cognivore.rag.tokenize import STOPWORDS, tokenize
+from cognivore.rag.tokenize import STOPWORDS, stem_tokens, tokenize
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ class EmbeddingModel(Protocol):
 class HashingEmbedder:
     # Bump the version whenever tokenization or hashing changes, so stores
     # embedded with the old scheme are re-embedded on load.
-    _VERSION = 3
+    _VERSION = 5
 
     def __init__(self, dim: int = 384, ngram_range: tuple[int, int] = (1, 2)) -> None:
         self.dim = dim
@@ -61,6 +61,8 @@ class HashingEmbedder:
         # vector; they are dropped unless nothing else is left.
         all_words = tokenize(text)
         words = [w for w in all_words if w not in STOPWORDS] or all_words
+        # Stemmed, so that "тарифы" and "тариф" land in the same bucket.
+        words = stem_tokens(words, text)
         if not words:
             return [text.lower()]
         lo, hi = self.ngram_range

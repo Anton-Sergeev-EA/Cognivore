@@ -165,22 +165,28 @@ _MARKERS: dict[str, frozenset[str]] = {
 _UNIQUE_CHARS = {"es": "ñ¿¡", "de": "ßäöü", "fr": "çœêëîïôûùâ", "it": "ìò"}
 
 
-def _latin_language(text: str) -> str | None:
+def _latin_language(text: str, min_evidence: int = 1) -> str | None:
     lowered = text.lower()
     words = _WORD_RE.findall(lowered)
     scores = {lang: sum(w in markers for w in words) for lang, markers in _MARKERS.items()}
     for lang, chars in _UNIQUE_CHARS.items():
         scores[lang] += 2 * sum(lowered.count(c) for c in chars)
     best = max(scores, key=lambda lang: scores[lang])
-    if scores[best] == 0:
+    if scores[best] < max(1, min_evidence):
         return None
     runner_up = max(score for lang, score in scores.items() if lang != best)
     return best if scores[best] > runner_up else None
 
 
-def detect_language_confident(text: str) -> str | None:
+def detect_language_confident(text: str, min_evidence: int = 1) -> str | None:
     """The language of ``text`` as one of the UI language codes, or
-    ``None`` when there isn't enough signal (e.g. "12 * 7")."""
+    ``None`` when there isn't enough signal (e.g. "12 * 7").
+
+    ``min_evidence`` is how many function words (or letters unique to the
+    language) Latin-script text needs before a language is named. One is
+    right for a chat question; terse text such as slide bullets ("Starter:
+    $9 per month") needs more -- a single "per" is English as often as
+    Italian."""
     cjk = kana = cyrillic = latin = devanagari = 0
     for ch in text:
         code = ord(ch)
@@ -205,7 +211,7 @@ def detect_language_confident(text: str) -> str | None:
     if cyrillic and cyrillic > latin:
         return "ru"
     if latin:
-        return _latin_language(text)
+        return _latin_language(text, min_evidence)
     return None
 
 

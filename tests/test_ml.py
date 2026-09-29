@@ -339,3 +339,14 @@ def test_a_gap_carries_no_misleading_sources_or_grounding(
     assert insight.hits == []
     assert insight.grounding is None
     assert insight.query_point is not None  # the question is still placed on the map
+
+
+def test_query_coverage_accepts_other_forms_of_a_word() -> None:
+    """A Russian question rarely uses the passage's exact word forms:
+    "тариф" / "Тарифы", "шифрование" / "Шифрование". Before, such a
+    question about an uploaded video's slide counted as unanswered."""
+    passage = "На экране: Тарифы · Старт — 490 рублей в месяц · Бизнес — 1990 рублей в месяц"
+    assert query_coverage("Сколько стоит тариф Старт?", passage) >= 0.5
+    assert query_coverage("What do the refunds cover?", "Refund policy: a full refund") > 0.3
+    # ...but a shared beginning alone doesn't make two words the same one.
+    assert query_coverage("компьютер", "компания") == 0.0

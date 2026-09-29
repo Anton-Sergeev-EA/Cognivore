@@ -124,3 +124,16 @@ def test_version_changes_on_every_add(document_store: DocumentStore) -> None:
     before = document_store.version
     document_store.add_text("One more document.", source="x.md")
     assert document_store.version == before + 1
+
+
+def test_a_question_in_other_word_forms_finds_its_passage() -> None:
+    """Live finding: "Куда компания выходит в следующем квартале?" ranked a
+    passage that merely said "компания" above the one about "Планы на
+    следующий квартал" -- lexical search saw no shared word in the latter."""
+    store = DocumentStore(HashingEmbedder())
+    store.add_text("О компании: компания обслуживает 340 клиентов.", source="about")
+    store.add_text("Планы на следующий квартал: запуск в Казахстане.", source="plans")
+
+    hits = store.search("Куда компания выходит в следующем квартале?", top_k=2)
+
+    assert hits[0].source == "plans"

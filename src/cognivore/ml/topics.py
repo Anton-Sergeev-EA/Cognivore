@@ -23,6 +23,14 @@ def cluster_keywords(texts: list[str], labels: list[int], top_n: int = 3) -> dic
     if not per_cluster:
         return {}
     avg_words = sum(overall.values()) / len(per_cluster)
+    # A word found in every cluster names none of them: boilerplate such as
+    # "On screen" in video timelines, or the company name in a handbook.
+    clusters_with = Counter(t for counts in per_cluster.values() for t in counts)
+    everywhere = (
+        {t for t, n in clusters_with.items() if n == len(per_cluster)}
+        if len(per_cluster) > 1
+        else set()
+    )
 
     keywords: dict[int, list[str]] = {}
     for label, counts in per_cluster.items():
@@ -33,7 +41,7 @@ def cluster_keywords(texts: list[str], labels: list[int], top_n: int = 3) -> dic
         )
         chosen: list[str] = []
         used_chars: set[str] = set()
-        for term in scored:
+        for term in sorted(scored, key=lambda t: t in everywhere):
             # Overlapping CJK bigrams ("退款", "款政") would otherwise
             # fill the label with near-duplicates of one word.
             if is_cjk_run(term):

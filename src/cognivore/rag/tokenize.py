@@ -19,6 +19,8 @@ kept as a unigram), everything else becomes lowercase alphanumeric words.
 from __future__ import annotations
 
 import re
+from functools import lru_cache
+from typing import Any
 
 # CJK Unified Ideographs (+ extension A, compatibility ideographs) and
 # Japanese kana. Kept as one class so mixed zh/ja text tokenizes uniformly.
@@ -59,6 +61,70 @@ def tokenize(text: str) -> list[str]:
     return tokens
 
 
+# -- Stemming for retrieval ------------------------------------------------
+#
+# Lexical retrieval (BM25, the hashing embedder) has to match "квартале"
+# with "квартал" and "refunds" with "refund", or a question phrased
+# naturally misses the passage that answers it. Snowball stemmers do most
+# of that; the stem is then cut to six letters, which (a) fixes Snowball's
+# Russian nouns in -л ("квартал" -> "кварта" but "квартале" -> "квартал")
+# and (b) makes stems agree when a short query and a long passage are
+# detected as different Latin-script languages. Display code (snippets,
+# topic names) keeps using the unstemmed tokens.
+
+_SNOWBALL = {
+    "ru": "russian",
+    "en": "english",
+    "es": "spanish",
+    "fr": "french",
+    "de": "german",
+    "it": "italian",
+}
+_STEM_LENGTH = 6
+
+
+@lru_cache(maxsize=8)
+def _stemmer(language: str) -> Any:
+    import snowballstemmer
+
+    return snowballstemmer.stemmer(_SNOWBALL[language])
+
+
+@lru_cache(maxsize=200_000)
+def _stem_word(word: str, language: str) -> str:
+    return str(_stemmer(language).stemWord(word))[:_STEM_LENGTH]
+
+
+def stem_tokens(tokens: list[str], text: str) -> list[str]:
+    """``tokens`` (from :func:`tokenize`) reduced to their stems: Cyrillic
+    words with the Russian stemmer, Latin-script words with the stemmer of
+    the language ``text`` is in (English when unclear). Numbers, CJK
+    bigrams and other scripts are kept as they are."""
+    latin_language: str | None = None
+    stems = []
+    for token in tokens:
+        if not token.isalpha() or is_cjk_run(token):
+            stems.append(token)
+        elif "\u0400" <= token[0] <= "\u04ff":
+            stems.append(_stem_word(token, "ru"))
+        elif token[0] < "\u0250":
+            if latin_language is None:
+                # Imported here: cognivore.ml imports this module.
+                from cognivore.ml.lang import detect_language_confident
+
+                detected = detect_language_confident(text)
+                latin_language = detected if detected in _SNOWBALL and detected != "ru" else "en"
+            stems.append(_stem_word(token, latin_language))
+        else:
+            stems.append(token)
+    return stems
+
+
+def index_terms(text: str) -> list[str]:
+    """The terms lexical retrieval indexes and queries with: stemmed tokens."""
+    return stem_tokens(tokenize(text), text)
+
+
 # Very small, high-frequency function-word lists. Only used where a token
 # carrying no topical meaning would actively mislead (cluster labels, query
 # coverage in the insight layer) -- BM25 already down-weights them via IDF.
@@ -77,7 +143,7 @@ STOPWORDS: frozenset[str] = frozenset(
     "один почти мой тем чтобы нее сейчас были куда зачем всех никогда можно при наконец "
     "два об другой хоть после над больше тот через эти нас про всего них какая много разве "
     "три эту моя впрочем хорошо свою этой перед иногда лучше чуть том нельзя такой им "
-    "более всегда конечно всю между это сколько какие каков какая".split()
+    "более всегда конечно всю между это сколько какие каков какая какое какую каких каково".split()
     # Spanish
     + "el la los las un una unos unas de del al y o que en es son por para con "
     "sin se su sus lo como más qué cuál cuáles cuánto cuánta cómo dónde cuándo "

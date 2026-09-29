@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import pytest
+
 from cognivore.rag.embeddings import HashingEmbedder
 from cognivore.rag.store import DocumentStore
-from cognivore.rag.tokenize import content_tokens, tokenize
+from cognivore.rag.tokenize import content_tokens, index_terms, tokenize
 
 
 def test_latin_and_cyrillic_words_are_lowercased_without_punctuation() -> None:
@@ -34,3 +36,34 @@ def test_chinese_queries_retrieve_the_matching_chunk() -> None:
     hits = store.search("退款政策是什么？", top_k=1)
     assert hits[0].source == "refund"
     assert hits[0].score > 0
+
+
+# -- Stemming for retrieval -------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("a", "b"),
+    [
+        ("квартале", "квартал"),  # Snowball alone gets this pair wrong
+        ("следующем", "следующий"),
+        ("тарифы", "тариф"),
+        ("компании", "компания"),
+        ("шифрования", "шифрование"),
+        ("refunds", "refund"),
+        ("policies", "policy"),
+        ("remboursements", "remboursement"),
+        ("Rückerstattungen", "Rückerstattung"),
+    ],
+)
+def test_index_terms_match_other_forms_of_a_word(a: str, b: str) -> None:
+    assert index_terms(a) == index_terms(b)
+
+
+def test_index_terms_keep_different_words_apart() -> None:
+    assert index_terms("квартал") != index_terms("квартира")
+    assert index_terms("компания") != index_terms("компьютер")
+
+
+def test_index_terms_leave_numbers_and_cjk_alone() -> None:
+    assert index_terms("Старт — 490 рублей") == ["старт", "490", "рубл"]
+    assert index_terms("退款政策") == ["退款", "款政", "政策"]

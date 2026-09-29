@@ -23,7 +23,7 @@ from rank_bm25 import BM25Okapi
 from cognivore.index import FlatIndex, NSWIndex, is_native
 from cognivore.rag.chunking import Chunk, split_text
 from cognivore.rag.embeddings import EmbeddingModel
-from cognivore.rag.tokenize import tokenize
+from cognivore.rag.tokenize import index_terms
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +137,7 @@ class DocumentStore:
 
     def _rebuild_bm25(self) -> None:
         self._bm25_ids = list(self._chunks.keys())
-        corpus = [tokenize(self._chunks[i]) for i in self._bm25_ids]
+        corpus = [index_terms(self._chunks[i]) for i in self._bm25_ids]
         self._bm25 = BM25Okapi(corpus) if corpus else None
 
     def search_multi(
@@ -183,7 +183,7 @@ class DocumentStore:
 
         lexical_scores: dict[int, float] = {}
         if self._bm25 is not None:
-            raw = self._bm25.get_scores(tokenize(query))
+            raw = self._bm25.get_scores(index_terms(query))
             max_score = max(raw, default=0.0) or 1.0
             lexical_scores = {
                 cid: float(s / max_score) for cid, s in zip(self._bm25_ids, raw, strict=True)

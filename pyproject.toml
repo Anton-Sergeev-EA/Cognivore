@@ -40,6 +40,7 @@ dependencies = [
     "sse-starlette>=3.0",
     "fastembed>=0.3",
     "rank-bm25>=0.2.2",
+    "snowballstemmer>=2.2",
 ]
 
 [project.optional-dependencies]
@@ -95,6 +96,10 @@ ignore = ["E501"]
 "src/cognivore/rag/tokenize.py" = ["RUF001", "SIM905"]
 # Question and arithmetic markers in the UI languages (？, ×) are meant.
 "src/cognivore/ml/intent.py" = ["RUF001"]
+# OCR cleanup works on bullet glyphs, dashes and Cyrillic/Latin look-alikes
+# by design; video timeline labels are in the nine UI languages.
+"src/cognivore/media/ocr.py" = ["RUF001", "RUF002"]
+"src/cognivore/media/video.py" = ["RUF001"]
 # Offline-demo and built-in replies in the nine UI languages.
 "src/cognivore/llm/fake_backend.py" = ["RUF001"]
 "src/cognivore/agent/replies.py" = ["RUF001"]

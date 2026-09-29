@@ -4,6 +4,7 @@ exposed a gap in the knowledge base."""
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 
@@ -42,10 +43,38 @@ class TurnInsight:
     gap: bool = False
 
 
+# A question word counts as found when the passage has the same word in
+# another form: "тариф" / "тарифы", "refund" / "refunds", "стоит" /
+# "стоимость". Measured as a shared prefix of at least this many
+# characters and this share of the shorter word.
+_MIN_STEM = 4
+_STEM_SHARE = 0.75
+
+
+# A passage scoring below this share of the best one isn't shown as a source.
+_MIN_SOURCE_SHARE = 0.1
+
+
+def _found_inflected(token: str, passage_tokens: set[str]) -> bool:
+    if token in passage_tokens:
+        return True
+    if len(token) < _MIN_STEM or not token.isalpha():
+        return False
+    stem = token[:_MIN_STEM]
+    for other in passage_tokens:
+        if not other.startswith(stem):
+            continue
+        shared = len(os.path.commonprefix([token, other]))
+        if shared >= _STEM_SHARE * min(len(token), len(other)):
+            return True
+    return False
+
+
 def query_coverage(query: str, passage: str) -> float:
     """Share of the question's meaningful content found in ``passage``.
 
-    Latin/Cyrillic text is measured in words. Chinese/Japanese text has no
+    Latin/Cyrillic text is measured in words, in any inflected form (see
+    :func:`_found_inflected`). Chinese/Japanese text has no
     word boundaries, and its overlapping character bigrams include
     boundary-spanning noise ("成长版多少钱" -> "长版", "版多", "少钱") that no
     document will ever contain -- so it is measured in *characters*
@@ -59,7 +88,7 @@ def query_coverage(query: str, passage: str) -> float:
     for token in content_tokens(query):
         if not is_cjk_run(token):
             total += 1
-            found += token in passage_tokens
+            found += _found_inflected(token, passage_tokens)
     for run in _CJK_RUN_RE.findall(query.lower()):
         stop = [ch in STOPWORDS for ch in run]
         for i in range(len(run) - 1):
@@ -114,6 +143,13 @@ def build_turn_insight(
     # evidence and grounding ranks refer to what the user sees.
     candidates = store.search_multi(queries, top_k=top_k + 3)
     distinct = distinct_snippets(candidates, question, limit=260, top_k=top_k)
+    # Passages that scored next to nothing are not evidence -- listing them
+    # as "sources" (at 0 %) only buries the ones that are.
+    if distinct:
+        best = max(hit.score for hit, _ in distinct)
+        distinct = [(h, s) for h, s in distinct if h.score >= _MIN_SOURCE_SHARE * best] or distinct[
+            :1
+        ]
     hits = [hit for hit, _ in distinct]
     insight.queries = queries
     insight.hits = [
