@@ -491,24 +491,64 @@ async function ingestFiles(files) {
   loadMap();
 }
 
-async function processMedia(file, endpoint, resultKey) {
+// Why part of a media analysis is missing (MediaResponse.notes) -> i18n key.
+const MEDIA_NOTES = {
+  ocr_unavailable: "mediaNoteOcrUnavailable",
+  ocr_languages_missing: "mediaNoteOcrLanguagesMissing",
+  speech_unavailable: "mediaNoteSpeechUnavailable",
+  speech_failed: "mediaNoteSpeechFailed",
+  no_speech: "mediaNoteNoSpeech",
+  scenes_truncated: "mediaNoteScenesTruncated",
+  already_in_knowledge_base: "mediaAlreadyInKb",
+};
+
+// Uploads an audio/video file. The server transcribes / analyzes it and
+// adds the timeline to the knowledge base, so the turn shows what was
+// found and the knowledge base (and its map) grows by the new passages.
+async function processMedia(file, endpoint, kind) {
   hideHero();
-  const key = resultKey === "transcript" ? "mediaUploadedAudio" : "mediaUploadedVideo";
+  const key = kind === "audio" ? "mediaUploadedAudio" : "mediaUploadedVideo";
   messagesEl.appendChild(setI18nText(el("div", "msg user"), key, { file: file.name }));
   const turn = newTurn();
+  // Long recordings take minutes: say what is going on, not "thinking".
+  setI18nText(turn.thinking.lastElementChild, "mediaProcessing");
+  scrollToBottom();
+  const logItem = logKb("kbIngesting", { file: file.name });
   const form = new FormData();
   form.append("file", file);
   try {
-    const res = await fetch(endpoint, { method: "POST", body: form });
+    // The UI language helps speech recognition when the recording itself
+    // doesn't make its language clear.
+    const url = `${endpoint}?language=${encodeURIComponent(currentLang)}`;
+    const res = await fetch(url, { method: "POST", body: form });
     const data = await res.json();
-    turn.text = data[resultKey] || data.detail || "";
+    if (!res.ok) throw new Error(data.detail || String(res.status));
+    turn.text = data.text || "";
     const textEl = ensureTextEl(turn);
     if (turn.text) textEl.textContent = turn.text;
-    else setI18nText(textEl, "mediaNoResult");
+    else setI18nText(textEl, "mediaNothingFound");
+
+    const notes = el("div", "media-notes");
+    if (data.chunks_added > 0) notes.appendChild(setI18nText(el("p", "ok"), "mediaAddedToKb"));
+    for (const code of data.notes || []) {
+      if (MEDIA_NOTES[code]) notes.appendChild(setI18nText(el("p"), MEDIA_NOTES[code]));
+    }
+    if (notes.children.length) turn.answer.appendChild(notes);
+
+    if (data.chunks_added > 0) {
+      setI18nText(logItem, "kbIngested", { file: file.name, added: data.chunks_added });
+      logItem.className = "ok";
+      loadStatus();
+      loadMap();
+    } else {
+      logItem.remove();
+    }
   } catch (err) {
     const textEl = ensureTextEl(turn);
     setI18nText(textEl, "mediaProcessingFailed");
     textEl.classList.add("error");
+    setI18nText(logItem, "kbIngestFailed", { file: file.name });
+    logItem.className = "err";
   }
   scrollToBottom();
 }
@@ -537,8 +577,8 @@ function wireDropzone(labelId, inputId, onFiles) {
 }
 
 wireDropzone("file-input-label", "file-input", ingestFiles);
-wireDropzone("audio-input-label", "audio-input", (files) => processMedia(files[0], "/api/media/audio", "transcript"));
-wireDropzone("video-input-label", "video-input", (files) => processMedia(files[0], "/api/media/video", "analysis"));
+wireDropzone("audio-input-label", "audio-input", (files) => processMedia(files[0], "/api/media/audio", "audio"));
+wireDropzone("video-input-label", "video-input", (files) => processMedia(files[0], "/api/media/video", "video"));
 
 // ── Drawers (narrow screens) ───────────────────────────────────────────
 

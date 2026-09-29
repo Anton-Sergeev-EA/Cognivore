@@ -1,202 +1,425 @@
-"""Correctness tests for lightweight video understanding.
+"""Video understanding, tested on synthetic videos built the way real ones
+look: slides with the same background and only the text changing,
+crossfades, bullets revealed one at a time, template slides that differ
+only in a number, moving camera footage.
 
-Both dependencies are optional (``cognivore[video]``), and OCR additionally
-needs the native Tesseract *binary* on top of the ``pytesseract`` Python
-package -- so every test here self-skips when either piece isn't available,
-rather than failing, the same pattern ``test_index.py`` uses for the native
-extension. That keeps the suite green on a machine that only installed the
-base package, while still giving real, non-mocked coverage wherever the
-video extra (and Tesseract) actually are installed -- e.g. the Docker image,
-which now installs both.
+OpenCV is optional (``cognivore[video]``) and OCR also needs the Tesseract
+binary, so these tests self-skip when either is missing (the CI installs
+both on one leg of the matrix; the Docker image ships both). The timeline
+tests at the end need neither.
 """
 
 from __future__ import annotations
 
 import shutil
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-cv2 = pytest.importorskip(
-    "cv2", reason="opencv-python-headless not installed (pip install cognivore[video])"
+from cognivore.media.audio import Transcript, TranscriptSegment
+from cognivore.media.video import (
+    Keyframe,
+    VideoAnalysis,
+    build_timeline,
+    section_text,
+    summarize_analysis,
+    timeline_passages,
 )
 
-pytest.importorskip(
-    "pytesseract", reason="pytesseract not installed (pip install cognivore[video])"
+W, H, FPS = 640, 360, 10
+_FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
+
+
+def _has_tesseract_pack(pack: str) -> bool:
+    if shutil.which("tesseract") is None:
+        return False
+    try:
+        import pytesseract
+
+        return pack in pytesseract.get_languages(config="")
+    except Exception:
+        return False
+
+
+needs_cv2 = pytest.mark.skipif(
+    __import__("importlib").util.find_spec("cv2") is None,
+    reason="opencv-python-headless not installed (pip install cognivore[video])",
+)
+needs_ocr = pytest.mark.skipif(
+    not _has_tesseract_pack("eng") or not (_FONT_DIR / "DejaVuSans.ttf").exists(),
+    reason="tesseract (with eng) or the DejaVu font is not installed",
+)
+needs_ocr_rus = pytest.mark.skipif(
+    not _has_tesseract_pack("rus"), reason="tesseract-ocr-rus is not installed"
 )
 
-from cognivore.media.video import _ocr_frame, extract_keyframes, summarize_keyframes  # noqa: E402
 
-tesseract_missing = shutil.which("tesseract") is None
-pytestmark_ocr = pytest.mark.skipif(
-    tesseract_missing,
-    reason="tesseract binary not installed (apt install tesseract-ocr / brew install tesseract)",
-)
-
-if not tesseract_missing:
-    import subprocess
-
-    _tesseract_langs = subprocess.run(
-        ["tesseract", "--list-langs"], capture_output=True, text=True, check=False
-    ).stdout
-    rus_missing = "rus" not in _tesseract_langs.splitlines()
-else:
-    rus_missing = True
-
-pytestmark_ocr_rus = pytest.mark.skipif(
-    rus_missing,
-    reason="tesseract-ocr-rus trained data not installed",
-)
-
-
-def _draw_text_frame(text: str, size: tuple[int, int] = (400, 100)) -> object:
-    """Renders `text` onto a white background with a Unicode-capable font
-    (cv2.putText only supports ASCII, which can't render Cyrillic), returning
-    a BGR array shaped like a real cv2 video frame."""
+def _slide(title: str, lines: list[str] = (), background: int = 250) -> Any:  # type: ignore[assignment]
+    """A slide as a BGR frame, drawn with a Unicode font (cv2.putText is
+    ASCII-only)."""
     import numpy as np
     from PIL import Image, ImageDraw, ImageFont
 
-    img = Image.new("RGB", size, color=(255, 255, 255))
+    img = Image.new("RGB", (W, H), (background,) * 3)
     draw = ImageDraw.Draw(img)
-    font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 28)
-    draw.text((10, 30), text, fill=(0, 0, 0), font=font)
-    return np.array(img)[:, :, ::-1]  # RGB -> BGR, matching cv2's frame layout
+    bold = ImageFont.truetype(str(_FONT_DIR / "DejaVuSans-Bold.ttf"), 34)
+    regular = ImageFont.truetype(str(_FONT_DIR / "DejaVuSans.ttf"), 26)
+    draw.text((40, 40), title, font=bold, fill=(10, 10, 10))
+    for i, line in enumerate(lines):
+        draw.text((50, 120 + i * 50), line, font=regular, fill=(10, 10, 10))
+    return np.array(img)[:, :, ::-1].copy()
 
 
-def _make_two_scene_video(path: Path) -> None:
-    """A tiny synthetic .mp4: 1s of plain gray, then 1s of a dark frame with
-    burned-in white text -- enough to exercise scene-change detection and,
-    on the second scene, OCR, without needing a real video fixture checked
-    into the repo."""
-    w, h, fps = 320, 240, 10
-    writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
+def _write(path: Path, frames: list[Any]) -> str:
+    import cv2
+
+    writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), FPS, (W, H))
     try:
-        import numpy as np
-
-        for _ in range(fps):
-            writer.write(np.full((h, w, 3), 200, dtype=np.uint8))
-        for _ in range(fps):
-            frame = np.full((h, w, 3), 30, dtype=np.uint8)
-            cv2.putText(
-                frame, "SCENE TWO", (20, h // 2), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 3
-            )
+        for frame in frames:
             writer.write(frame)
     finally:
         writer.release()
+    return str(path)
 
 
-def test_extract_keyframes_detects_scene_changes(tmp_path: Path) -> None:
-    video_path = tmp_path / "clip.mp4"
-    _make_two_scene_video(video_path)
-
-    # A low threshold because the synthetic frames above are flat colors --
-    # their histograms are near-delta functions, so even a drastic-looking
-    # cut produces a smaller chi-square distance than typical real footage
-    # would. Real video content should generally work fine with the
-    # documented default of 30.0.
-    keyframes = extract_keyframes(str(video_path), scene_threshold=0.5, run_ocr=False)
-
-    assert len(keyframes) == 2
-    assert keyframes[0].frame_index == 0
-    assert keyframes[1].frame_index == 10
+def _hold(frame: Any, seconds: float) -> list[Any]:
+    return [frame] * int(seconds * FPS)
 
 
-def test_extract_keyframes_respects_max_keyframes(tmp_path: Path) -> None:
-    video_path = tmp_path / "clip.mp4"
-    _make_two_scene_video(video_path)
+def _crossfade(a: Any, b: Any, seconds: float = 1.0) -> list[Any]:
+    import cv2
 
-    keyframes = extract_keyframes(
-        str(video_path), scene_threshold=0.5, max_keyframes=1, run_ocr=False
+    n = int(seconds * FPS)
+    return [cv2.addWeighted(a, 1 - (k + 1) / n, b, (k + 1) / n, 0) for k in range(n)]
+
+
+def _scenes(path: str, **kwargs: Any) -> list[Keyframe]:
+    from cognivore.media.video import extract_keyframes
+
+    return extract_keyframes(path, **kwargs)
+
+
+# -- Scene detection (OpenCV only) --------------------------------------
+
+
+@needs_cv2
+def test_slides_on_the_same_background_are_separate_scenes(tmp_path: Path) -> None:
+    """The case the old histogram comparison missed: a white slide with
+    other text has almost the same brightness histogram."""
+    if not (_FONT_DIR / "DejaVuSans.ttf").exists():
+        pytest.skip("DejaVu font not installed")
+    frames = []
+    for i in range(3):
+        frames += _hold(_slide(f"Slide {i + 1}", [f"Point number {i + 1}"]), 2)
+    scenes = _scenes(_write(tmp_path / "v.mp4", frames), run_ocr=False)
+
+    assert len(scenes) == 3
+    for i, scene in enumerate(scenes):
+        assert abs(scene.timestamp - 2 * i) <= 0.6
+    assert scenes[-1].end == pytest.approx(6.0, abs=0.2)
+
+
+@needs_cv2
+def test_crossfades_give_one_scene_per_slide(tmp_path: Path) -> None:
+    if not (_FONT_DIR / "DejaVuSans.ttf").exists():
+        pytest.skip("DejaVu font not installed")
+    slides = [_slide(f"Topic {i}", ["Some text", f"Detail {i}"]) for i in range(3)]
+    frames = _hold(slides[0], 2) + _crossfade(slides[0], slides[1]) + _hold(slides[1], 2)
+    frames += _crossfade(slides[1], slides[2]) + _hold(slides[2], 2)
+
+    assert len(_scenes(_write(tmp_path / "v.mp4", frames), run_ocr=False)) == 3
+
+
+@needs_cv2
+def test_a_static_video_is_one_scene(tmp_path: Path) -> None:
+    import numpy as np
+
+    frames = _hold(np.full((H, W, 3), 128, dtype=np.uint8), 5)
+    assert len(_scenes(_write(tmp_path / "v.mp4", frames), run_ocr=False)) == 1
+
+
+@needs_cv2
+def test_moving_footage_takes_a_frame_every_few_seconds(tmp_path: Path) -> None:
+    """Camera footage never settles: a frame every ~8 s, not one per sample."""
+    import numpy as np
+
+    rng = np.random.default_rng(0)
+    xx = np.tile(np.arange(W, dtype=np.float32), (H, 1))
+    frames = []
+    for f in range(20 * FPS):
+        base = (xx + f * 12) % W / W * 150 + 50
+        noise = rng.normal(0, 10, (H, W))
+        frames.append(np.clip(base + noise, 0, 255).astype(np.uint8)[:, :, None].repeat(3, 2))
+    scenes = _scenes(_write(tmp_path / "v.mp4", frames), run_ocr=False)
+
+    assert 1 <= len(scenes) <= 4
+
+
+@needs_cv2
+def test_max_keyframes_stops_and_says_so(tmp_path: Path) -> None:
+    if not (_FONT_DIR / "DejaVuSans.ttf").exists():
+        pytest.skip("DejaVu font not installed")
+    frames = []
+    for i in range(4):
+        frames += _hold(_slide(f"Slide {i + 1}"), 1.5)
+    notes: list[str] = []
+    scenes = _scenes(
+        _write(tmp_path / "v.mp4", frames), run_ocr=False, max_keyframes=2, notes=notes
     )
 
-    assert len(keyframes) == 1
+    assert len(scenes) == 2
+    assert "scenes_truncated" in notes
 
 
-def test_extract_keyframes_raises_on_missing_file(tmp_path: Path) -> None:
+@needs_cv2
+def test_missing_file_raises(tmp_path: Path) -> None:
     with pytest.raises(ValueError):
-        extract_keyframes(str(tmp_path / "does-not-exist.mp4"))
+        _scenes(str(tmp_path / "does-not-exist.mp4"))
 
 
-@pytestmark_ocr
-def test_ocr_frame_reads_text_off_a_synthetic_frame() -> None:
-    import numpy as np
-
-    frame = np.full((100, 400, 3), 255, dtype=np.uint8)
-    cv2.putText(frame, "HELLO WORLD", (20, 60), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 0), 3)
-
-    assert "HELLO" in _ocr_frame(frame).upper()
+# -- With OCR -----------------------------------------------------------
 
 
-@pytestmark_ocr
-@pytestmark_ocr_rus
-def test_ocr_frame_reads_cyrillic_text_with_the_default_language_pack() -> None:
-    """Regression test for the exact bug reported live: on-screen Cyrillic
-    text (e.g. a Russian terminal/UI in a screen recording) came out as
-    garbled look-alike Latin letters because `_ocr_frame` was hardcoded to
-    English-only OCR. The default is now `eng+rus` (see `Settings.ocr_languages`
-    and the Dockerfile), so real Cyrillic text should come back correctly."""
-    frame = _draw_text_frame("Контейнеры запущены")
+@needs_cv2
+@needs_ocr
+def test_slide_text_is_read_and_cleaned(tmp_path: Path) -> None:
+    frames = _hold(_slide("Pricing", ["• Starter: $9 per month", "• Team: $29 per user"]), 2)
+    frames += _hold(_slide("Support", ["• Response within 4 hours"]), 2)
+    scenes = _scenes(_write(tmp_path / "v.mp4", frames), ocr_languages="eng")
 
-    assert "Контейнеры" in _ocr_frame(frame)
-
-
-@pytestmark_ocr
-def test_ocr_frame_mangles_cyrillic_when_forced_to_english_only() -> None:
-    """The other half of the regression test above: explicitly requesting
-    `lang="eng"` on Cyrillic text should *not* recognize it correctly -- this
-    is what locks in that the fix is the `eng+rus` default actually taking
-    effect, not a coincidence of a better OCR engine."""
-    frame = _draw_text_frame("Контейнеры запущены")
-
-    assert "Контейнеры" not in _ocr_frame(frame, lang="eng")
+    assert [s.ocr_text.splitlines()[0] for s in scenes] == ["Pricing", "Support"]
+    assert "Starter: $9 per month" in scenes[0].ocr_text
+    assert "•" not in scenes[0].ocr_text
 
 
-@pytestmark_ocr
-def test_extract_keyframes_runs_ocr_on_the_second_scene(tmp_path: Path) -> None:
-    video_path = tmp_path / "clip.mp4"
-    _make_two_scene_video(video_path)
+@needs_cv2
+@needs_ocr
+def test_template_slides_differing_in_a_number_are_all_kept(tmp_path: Path) -> None:
+    frames = []
+    for i in range(5):
+        frames += _hold(_slide(f"Section {i + 1}", [f"Metric: {100 + 7 * i} units"]), 1.5)
+    scenes = _scenes(_write(tmp_path / "v.mp4", frames), ocr_languages="eng")
 
-    keyframes = extract_keyframes(str(video_path), scene_threshold=0.5, run_ocr=True)
-
-    assert len(keyframes) == 2
-    assert keyframes[0].ocr_text == ""
-    assert "SCENE TWO" in keyframes[1].ocr_text.upper()
+    assert [s.ocr_text.splitlines()[0] for s in scenes] == [f"Section {i}" for i in range(1, 6)]
 
 
-def test_ocr_frame_returns_empty_string_when_pytesseract_is_unavailable(
+@needs_cv2
+@needs_ocr
+def test_bullets_revealed_one_by_one_make_one_scene(tmp_path: Path) -> None:
+    bullets = ["First step: sign up", "Second step: pick a plan", "Third step: pay"]
+    frames = []
+    for k in range(1, 4):
+        frames += _hold(_slide("Getting started", bullets[:k]), 1.5)
+    frames += _hold(_slide("Export", ["Open Settings"]), 1.5)
+    scenes = _scenes(_write(tmp_path / "v.mp4", frames), ocr_languages="eng")
+
+    assert len(scenes) == 2
+    assert all(b in scenes[0].ocr_text for b in bullets)
+    assert scenes[0].timestamp == pytest.approx(0.0, abs=0.6)
+
+
+@needs_cv2
+@needs_ocr
+@needs_ocr_rus
+def test_cyrillic_slides_are_read_with_the_right_language(tmp_path: Path) -> None:
+    frames = _hold(_slide("Политика возврата", ["Полный возврат в течение 14 дней"]), 2)
+    scenes = _scenes(_write(tmp_path / "v.mp4", frames), ocr_languages="auto")
+
+    assert "Политика возврата" in scenes[0].ocr_text
+    assert "14 дней" in scenes[0].ocr_text
+
+
+@needs_cv2
+@needs_ocr
+def test_missing_language_pack_is_reported(tmp_path: Path) -> None:
+    frames = _hold(_slide("Hello"), 1)
+    notes: list[str] = []
+    _scenes(_write(tmp_path / "v.mp4", frames), ocr_languages="eng+not_a_pack", notes=notes)
+
+    assert notes == ["ocr_languages_missing"]
+
+
+@needs_cv2
+@needs_ocr
+def test_analyze_video_merges_speech_into_the_scenes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from cognivore.media.video import analyze_video
+
+    frames = _hold(_slide("Pricing", ["Starter: $9 per month"]), 3)
+    frames += _hold(_slide("Support", ["Response within 4 hours"]), 3)
+    path = _write(tmp_path / "v.mp4", frames)
+
+    def fake_transcriber(video_path: str, model_size: str, hint: str | None) -> Transcript:
+        assert video_path == path
+        return Transcript(
+            text="",
+            segments=[
+                TranscriptSegment(0.5, 2.0, "The starter plan is nine dollars."),
+                TranscriptSegment(3.5, 5.0, "We answer within four hours."),
+            ],
+            language="en",
+        )
+
+    # Videos written by OpenCV have no audio track; pretend this one has.
+    monkeypatch.setattr("cognivore.media.video._has_audio_track", lambda _: True)
+    analysis = analyze_video(path, ocr_languages="eng", transcriber=fake_transcriber)
+    passages = timeline_passages(analysis)
+
+    assert len(passages) == 2
+    assert passages[0].startswith("[00:00–00:03]")
+    assert "On screen: Pricing · Starter: $9 per month" in passages[0]
+    assert "Speech: The starter plan is nine dollars." in passages[0]
+    assert "Speech: We answer within four hours." in passages[1]
+
+
+@needs_cv2
+def test_speech_failure_keeps_the_on_screen_part(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from cognivore.media.video import analyze_video
+
+    if not (_FONT_DIR / "DejaVuSans.ttf").exists():
+        pytest.skip("DejaVu font not installed")
+    path = _write(tmp_path / "v.mp4", _hold(_slide("Hello"), 1))
+
+    def broken(video_path: str, model_size: str, hint: str | None) -> Transcript:
+        raise RuntimeError("no model download possible")
+
+    monkeypatch.setattr("cognivore.media.video._has_audio_track", lambda _: True)
+    analysis = analyze_video(path, transcriber=broken)
+
+    assert analysis.transcript is None
+    assert "speech_failed" in analysis.notes
+    assert len(analysis.scenes) == 1
+
+
+@needs_cv2
+def test_a_video_without_sound_is_not_sent_to_speech_recognition(tmp_path: Path) -> None:
+    from cognivore.media.video import analyze_video
+
+    pytest.importorskip("av", reason="PyAV (installed with the audio extra) not installed")
+    path = _write(tmp_path / "v.mp4", _hold(_slide("Hello"), 1))
+    calls: list[str] = []
+
+    analysis = analyze_video(path, transcriber=lambda p, m, h: calls.append(p))
+
+    assert calls == []
+    assert analysis.notes == []
+
+
+def _analyze_with(
+    monkeypatch: pytest.MonkeyPatch,
+    scenes: list[Keyframe],
+    transcript: Transcript | None,
+    **kwargs: Any,
+) -> tuple[VideoAnalysis, list[str | None]]:
+    """analyze_video with scene detection and speech recognition faked, to
+    test how the two are combined."""
+    from cognivore.media import video
+
+    monkeypatch.setattr(video, "extract_keyframes", lambda path, **_: scenes)
+    monkeypatch.setattr(video, "_has_audio_track", lambda _: True)
+    hints: list[str | None] = []
+
+    def transcriber(path: str, model_size: str, hint: str | None) -> Transcript | None:
+        hints.append(hint)
+        return transcript
+
+    return video.analyze_video("v.mp4", transcriber=transcriber, **kwargs), hints
+
+
+def test_the_on_screen_language_tells_whisper_what_to_listen_for(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """`_ocr_frame` must degrade to "" rather than raise when the optional
-    OCR dependency isn't installed -- this is what made the missing
-    `pytesseract` dependency (before this fix) fail silently instead of
-    loudly, so it's worth locking in as the *intended* fallback behavior for
-    a genuinely-missing dependency, as opposed to a declared-but-uninstalled
-    one."""
-    import builtins
+    """Measured: robotic Russian speech was guessed as Georgian (p=0.31) and
+    came out as gibberish; with the language given, it came out Russian."""
+    scenes = [Keyframe(0.0, 0, "Политика возврата\nПолный возврат в течение 14 дней", end=5.0)]
+    _, hints = _analyze_with(monkeypatch, scenes, None, language_hint="en")
 
-    real_import = builtins.__import__
-
-    def fake_import(name: str, *args: object, **kwargs: object) -> object:
-        if name == "pytesseract":
-            raise ImportError("simulated: pytesseract not installed")
-        return real_import(name, *args, **kwargs)
-
-    monkeypatch.setattr(builtins, "__import__", fake_import)
-
-    import numpy as np
-
-    frame = np.zeros((10, 10, 3), dtype=np.uint8)
-    assert _ocr_frame(frame) == ""
+    assert hints == ["ru"]  # the slides win over the UI language
 
 
-def test_summarize_keyframes_includes_ocr_text_when_present() -> None:
-    from cognivore.media.video import Keyframe
+def test_without_on_screen_text_the_ui_language_is_the_hint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, hints = _analyze_with(monkeypatch, [Keyframe(0.0, 0, "", end=5.0)], None, language_hint="de")
 
-    summary = summarize_keyframes([Keyframe(timestamp=1.0, frame_index=10, ocr_text="SCENE TWO")])
-
-    assert "00:01" in summary
-    assert "SCENE TWO" in summary
+    assert hints == ["de"]
 
 
-def test_summarize_keyframes_handles_no_scenes() -> None:
-    assert summarize_keyframes([]) == "No distinct scenes were detected."
+def test_a_sound_track_without_speech_is_reported(monkeypatch: pytest.MonkeyPatch) -> None:
+    empty = Transcript(text="", segments=[], language="")
+    analysis, _ = _analyze_with(monkeypatch, [Keyframe(0.0, 0, "Title", end=5.0)], empty)
+
+    assert analysis.transcript is None
+    assert analysis.notes == ["no_speech"]
+
+
+def test_english_slides_get_english_labels_even_with_an_italian_looking_word() -> None:
+    analysis = VideoAnalysis(
+        duration=4, scenes=[Keyframe(0.0, 0, "Pricing\nStarter: $9 per month", end=4.0)]
+    )
+    assert timeline_passages(analysis)[0].splitlines()[1].startswith("On screen: ")
+
+
+# -- Timeline (no OpenCV needed) ----------------------------------------
+
+
+def _segment(start: float, end: float, text: str) -> TranscriptSegment:
+    return TranscriptSegment(start=start, end=end, text=text)
+
+
+def test_timeline_puts_speech_under_the_slide_shown_at_the_time() -> None:
+    analysis = VideoAnalysis(
+        duration=20.0,
+        scenes=[
+            Keyframe(0.0, 0, "Тарифы\nСтарт — 490 рублей", end=10.0),
+            Keyframe(10.0, 100, "Безопасность", end=20.0),
+        ],
+        transcript=Transcript(
+            text="",
+            segments=[
+                _segment(1, 4, "Тариф Старт стоит 490 рублей."),
+                _segment(12, 15, "Всё шифруется."),
+            ],
+            language="ru",
+        ),
+    )
+    sections = build_timeline(analysis)
+
+    assert [(s.start, s.end) for s in sections] == [(0.0, 10.0), (10.0, 20.0)]
+    assert sections[0].speech == "Тариф Старт стоит 490 рублей."
+    assert sections[1].speech == "Всё шифруется."
+    # Labels follow the language of the content.
+    assert section_text(sections[0], "ru") == (
+        "[00:00–00:10]\nНа экране: Тарифы · Старт — 490 рублей\nРечь: Тариф Старт стоит 490 рублей."
+    )
+
+
+def test_speech_without_slides_is_cut_into_minute_sections() -> None:
+    segments = [_segment(t, t + 20, f"part {t}") for t in range(0, 150, 30)]
+    analysis = VideoAnalysis(
+        duration=150.0,
+        scenes=[Keyframe(0.0, 0, "", end=150.0)],  # a talking head: no text
+        transcript=Transcript(text="", segments=segments, language="en"),
+    )
+    sections = build_timeline(analysis)
+
+    assert [s.on_screen for s in sections] == ["", "", ""]
+    assert [round(s.start) for s in sections] == [0, 60, 120]
+    assert "part 0 part 30" in sections[0].speech
+
+
+def test_long_videos_get_hour_timestamps() -> None:
+    analysis = VideoAnalysis(duration=4000, scenes=[Keyframe(3700.0, 0, "Q&A", end=4000.0)])
+    assert timeline_passages(analysis)[0].startswith("[1:01:40–1:06:40]")
+
+
+def test_summary_when_nothing_was_found() -> None:
+    assert summarize_analysis(VideoAnalysis(duration=0, scenes=[])) == (
+        "No distinct scenes were detected."
+    )
+    blank = VideoAnalysis(duration=5, scenes=[Keyframe(0.0, 0, "", end=5.0)])
+    assert summarize_analysis(blank) == "No on-screen text or speech was found in this video."

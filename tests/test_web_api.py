@@ -392,3 +392,142 @@ def test_non_strict_mode_tells_the_model_the_knowledge_base_has_nothing(
     assert "contains nothing about it" in _HonestLLM.system
     assert body["answer"].startswith("The knowledge base has no information")
     assert body["insight"]["gap"] is True
+
+
+# -- Audio and video ------------------------------------------------------
+
+
+def _fake_video_analysis(path: str) -> object:
+    from cognivore.media.audio import Transcript, TranscriptSegment
+    from cognivore.media.video import Keyframe, VideoAnalysis
+
+    return VideoAnalysis(
+        duration=20.0,
+        scenes=[
+            Keyframe(0.0, 0, "Тарифы\nСтарт — 490 рублей в месяц", end=10.0),
+            Keyframe(10.0, 250, "Безопасность\nШифрование AES-256", end=20.0),
+        ],
+        transcript=Transcript(
+            text="",
+            segments=[TranscriptSegment(12.0, 16.0, "Все данные шифруются алгоритмом AES.")],
+            language="ru",
+        ),
+        ocr_languages="rus+eng",
+    )
+
+
+@pytest.fixture
+def video_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    pytest.importorskip("cv2", reason="the video tool needs the `video` extra")
+    monkeypatch.setattr(
+        "cognivore.web.app.analyze_video", lambda path, **_: _fake_video_analysis(path)
+    )
+    settings = Settings(data_dir=tmp_path / ".cognivore", prefer_semantic_embedder=False)
+    return TestClient(create_app(settings))
+
+
+def _upload_video(client: TestClient, name: str = "lecture.mp4", query: str = "") -> dict:
+    res = client.post(
+        f"/api/media/video{query}", files={"file": (name, b"not really a video", "video/mp4")}
+    )
+    assert res.status_code == 200, res.text
+    return res.json()
+
+
+def test_uploaded_video_goes_into_the_knowledge_base_with_timestamps(
+    video_client: TestClient,
+) -> None:
+    body = _upload_video(video_client)
+
+    assert body["source"] == "lecture.mp4"
+    assert body["scenes"] == 2
+    assert body["speech_language"] == "ru"
+    assert body["chunks_added"] == 2
+    assert body["text"].startswith("[00:00–00:10]\nНа экране: Тарифы · Старт — 490 рублей в месяц")
+    assert "Речь: Все данные шифруются алгоритмом AES." in body["text"]
+    assert body["analysis"] == body["text"]  # the field's earlier name still works
+    chunks = video_client.get("/api/knowledge_base").json()
+    assert {c["source"] for c in chunks} == {"lecture.mp4"}
+
+
+def test_a_question_about_the_video_is_answered_from_it(video_client: TestClient) -> None:
+    _upload_video(video_client)
+    body = video_client.post("/api/chat", json={"message": "Сколько стоит тариф Старт?"}).json()
+
+    assert "490" in body["answer"]
+    assert body["insight"]["hits"][0]["source"] == "lecture.mp4"
+    assert body["insight"]["hits"][0]["preview"].startswith("[00:00–00:10]")
+    assert not body["insight"]["gap"]
+
+
+def test_uploading_the_same_video_twice_does_not_duplicate_it(video_client: TestClient) -> None:
+    _upload_video(video_client)
+    again = _upload_video(video_client)
+
+    assert again["chunks_added"] == 0
+    assert "already_in_knowledge_base" in again["notes"]
+    assert again["total_chunks"] == 2
+
+
+def test_video_can_be_analyzed_without_adding_it(video_client: TestClient) -> None:
+    body = _upload_video(video_client, query="?ingest=false")
+
+    assert body["chunks_added"] == 0 and body["total_chunks"] == 0
+    assert "Тарифы" in body["text"]
+
+
+def test_uploaded_audio_goes_into_the_knowledge_base(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pytest.importorskip("faster_whisper", reason="the audio tool needs the `audio` extra")
+    from cognivore.media.audio import Transcript, TranscriptSegment
+
+    transcript = Transcript(
+        text="",
+        segments=[
+            TranscriptSegment(0.0, 5.0, "Welcome to the weekly sync."),
+            TranscriptSegment(70.0, 75.0, "The release moves to Friday."),
+        ],
+        language="en",
+    )
+    hints: list[str | None] = []
+
+    def fake_transcribe(path: str, model_size: str, language_hint: str | None = None) -> object:
+        hints.append(language_hint)
+        return transcript
+
+    monkeypatch.setattr("cognivore.media.audio.transcribe", fake_transcribe)
+    client = TestClient(
+        create_app(Settings(data_dir=tmp_path / ".cognivore", prefer_semantic_embedder=False))
+    )
+
+    res = client.post(
+        "/api/media/audio?language=en", files={"file": ("sync.m4a", b"audio", "audio/mp4")}
+    )
+    body = res.json()
+
+    assert hints == ["en"]  # the UI language is passed on as a hint
+
+    assert res.status_code == 200
+    assert body["chunks_added"] == 2  # two one-minute stretches of speech
+    assert body["transcript"].startswith("[00:00–00:05]\nSpeech: Welcome to the weekly sync.")
+    assert "[01:10–01:15]" in body["text"]
+
+
+def test_audio_without_speech_says_so(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("faster_whisper", reason="the audio tool needs the `audio` extra")
+    from cognivore.media.audio import Transcript
+
+    monkeypatch.setattr(
+        "cognivore.media.audio.transcribe",
+        lambda path, model_size, language_hint=None: Transcript(text="", segments=[], language=""),
+    )
+    client = TestClient(
+        create_app(Settings(data_dir=tmp_path / ".cognivore", prefer_semantic_embedder=False))
+    )
+    body = client.post(
+        "/api/media/audio", files={"file": ("music.mp3", b"audio", "audio/mpeg")}
+    ).json()
+
+    assert body["notes"] == ["no_speech"]
+    assert body["chunks_added"] == 0

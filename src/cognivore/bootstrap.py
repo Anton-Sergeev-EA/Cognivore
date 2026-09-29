@@ -259,6 +259,7 @@ def build_tool_registry(
                     scene_threshold=settings.video_scene_threshold,
                     max_keyframes=settings.video_max_keyframes,
                     ocr_languages=settings.ocr_languages,
+                    whisper_model_size=settings.whisper_model_size,
                 )
             )
         else:

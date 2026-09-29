@@ -129,18 +129,28 @@ class Settings(BaseSettings):
     max_agent_steps: int = Field(default=6, ge=1)
 
     # -- Audio / Video ----------------------------------------------------
-    whisper_model_size: str = Field(default="base")
-    video_scene_threshold: float = Field(default=30.0, description="Frame-diff threshold, 0-255")
-    video_max_keyframes: int = Field(default=24, ge=1)
+    whisper_model_size: str = Field(
+        default="small",
+        description="faster-whisper model for speech: tiny, base, small, medium, large-v3. 'small' "
+        "(~480 MB, downloaded on first use) is the smallest that transcribes the nine UI languages "
+        "reliably; 'base' (~150 MB) is faster but often mishears non-English speech.",
+    )
+    video_scene_threshold: float = Field(
+        default=30.0,
+        description="How much (0-255) a pixel's brightness must change between frames to count as "
+        "changed when looking for the scenes (slides, screens) of a video.",
+    )
+    video_max_keyframes: int = Field(
+        default=200, ge=1, description="Most scenes taken from one video; the rest is skipped."
+    )
     ocr_languages: str = Field(
-        default="eng+rus",
-        description="Tesseract language pack(s) for on-screen text OCR in analyze_video, as a "
-        "'+'-joined string (Tesseract's own multi-language syntax, e.g. 'eng+rus+deu'). Passing "
-        "only 'eng' on text that's actually Cyrillic (or vice versa) doesn't fail -- it silently "
-        "transliterates into visually-similar wrong letters (e.g. Cyrillic 'Контейнеры' as 'eng' "
-        "misreads into 'KoHTewHepbi'), which is easy to mistake for a low-quality scan rather "
-        "than a language mismatch. Each additional language needs its trained-data package "
-        "installed (tesseract-ocr-<lang>; the Docker image ships eng+rus by default).",
+        default="auto",
+        description="Tesseract language packs for reading on-screen text in videos: 'auto' (every "
+        "installed pack of the nine UI languages: eng, rus, chi_sim, spa, hin, fra, deu, jpn, "
+        "ita) or a '+'-joined list such as 'eng+rus'. Each frame is read with the packs of its "
+        "script (Latin, Cyrillic, Chinese, Japanese, Devanagari), so a video may switch language. "
+        "Packs come from the system package manager (tesseract-ocr-<lang>); the Docker image "
+        "ships all nine. A listed pack that isn't installed is skipped with a warning.",
     )
 
     # -- Web server --------------------------------------------------------

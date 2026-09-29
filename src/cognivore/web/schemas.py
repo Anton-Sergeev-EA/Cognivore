@@ -69,6 +69,26 @@ class IngestResponse(BaseModel):
     total_chunks: int
 
 
+class MediaResponse(BaseModel):
+    """What was found in an uploaded audio or video file, and what of it
+    went into the knowledge base."""
+
+    source: str
+    # The timeline as text: one passage per scene / stretch of speech.
+    text: str
+    duration: float
+    scenes: int = 0
+    speech_language: str | None = None
+    ocr_languages: str = ""
+    # Why part of the analysis is missing (see cognivore.media.video.VideoAnalysis).
+    notes: list[str] = Field(default_factory=list)
+    chunks_added: int = 0
+    total_chunks: int = 0
+    # Earlier names of `text`, kept for API clients.
+    transcript: str | None = None
+    analysis: str | None = None
+
+
 class ChunkOut(BaseModel):
     id: int
     text: str

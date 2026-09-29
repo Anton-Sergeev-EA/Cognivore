@@ -249,6 +249,9 @@ button { font: inherit; color: inherit; }
 .answer { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .answer-text { padding: 13px 16px; white-space: pre-wrap; word-wrap: break-word; }
 .answer-text.error { color: var(--danger); }
+.media-notes { padding: 0 16px 12px; display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+.media-notes p { margin: 0; }
+.media-notes p.ok { color: var(--good); }
 .answer-text .s-weak { text-decoration: underline wavy var(--weak); text-decoration-thickness: 1px; text-underline-offset: 3px; cursor: help; }
 .answer-text .s-strong { border-radius: 3px; transition: background-color 0.15s; cursor: help; }
 .answer-text .s-strong:hover, .answer-text .s-strong.hl { background: var(--accent-soft); }

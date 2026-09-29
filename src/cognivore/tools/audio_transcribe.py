@@ -18,7 +18,7 @@ class AudioTranscribeTool(Tool):
         "required": ["audio_path"],
     }
 
-    def __init__(self, model_size: str = "base") -> None:
+    def __init__(self, model_size: str = "small") -> None:
         self.model_size = model_size
 
     def run(self, audio_path: str = "", **_: object) -> str:

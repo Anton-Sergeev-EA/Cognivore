@@ -30,6 +30,7 @@ from cognivore.bootstrap import (
 from cognivore.config import Settings, get_settings
 from cognivore.index import is_native
 from cognivore.llm.fake_backend import FakeLLMBackend
+from cognivore.media.video import VideoAnalysis, analyze_video, timeline_passages
 from cognivore.ml import KnowledgeGapTracker, KnowledgeMapBuilder, TurnInsight, build_turn_insight
 from cognivore.ml.insight import SEARCH_TOOL
 from cognivore.rag.store import DocumentStore, embedder_id
@@ -43,6 +44,7 @@ from cognivore.web.schemas import (
     IngestTextRequest,
     InsightOut,
     KnowledgeMapOut,
+    MediaResponse,
     TraceStepOut,
 )
 
@@ -377,33 +379,110 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="no such gap")
         return {"resolved": query}
 
-    @app.post("/api/media/audio")
-    async def media_audio(file: UploadFile = File(...)) -> dict:
-        tool = agent.tools.get("transcribe_audio")
-        if tool is None:
+    def _ingest_media(analysis: VideoAnalysis, source: str, ingest: bool) -> MediaResponse:
+        """The timeline of an audio/video file, added to the knowledge base
+        one passage per scene / stretch of speech so that every chunk keeps
+        its timestamps -- a question about the video then cites the moment."""
+        passages = timeline_passages(analysis)
+        notes = list(analysis.notes)
+        added = 0
+        if ingest and passages:
+            if source in store.sources():
+                notes.append("already_in_knowledge_base")
+            else:
+                for passage in passages:
+                    added += len(
+                        store.add_text(
+                            passage,
+                            source=source,
+                            chunk_size=settings.chunk_size,
+                            chunk_overlap=settings.chunk_overlap,
+                        )
+                    )
+                _persist_store()
+        text = "\n\n".join(passages)
+        transcript = analysis.transcript
+        return MediaResponse(
+            source=source,
+            text=text,
+            duration=round(analysis.duration, 2),
+            scenes=sum(1 for s in analysis.scenes if s.ocr_text),
+            speech_language=transcript.language if transcript is not None else None,
+            ocr_languages=analysis.ocr_languages,
+            notes=notes,
+            chunks_added=added,
+            total_chunks=len(store),
+        )
+
+    def _transcribe_audio(path: str, language: str | None) -> VideoAnalysis:
+        from cognivore.media.audio import transcribe
+
+        try:
+            transcript = transcribe(
+                path, model_size=settings.whisper_model_size, language_hint=language
+            )
+        except Exception:
+            logger.warning("Could not transcribe %s.", path, exc_info=True)
+            return VideoAnalysis(duration=0.0, scenes=[], notes=["speech_failed"])
+        if not transcript.segments:
+            return VideoAnalysis(duration=0.0, scenes=[], notes=["no_speech"])
+        return VideoAnalysis(duration=transcript.segments[-1].end, scenes=[], transcript=transcript)
+
+    def _analyze_video(path: str, language: str | None) -> VideoAnalysis:
+        return analyze_video(
+            path,
+            scene_threshold=settings.video_scene_threshold,
+            max_keyframes=settings.video_max_keyframes,
+            ocr_languages=settings.ocr_languages,
+            whisper_model_size=settings.whisper_model_size,
+            language_hint=language,
+        )
+
+    @app.post("/api/media/audio", response_model=MediaResponse)
+    async def media_audio(
+        file: UploadFile = File(...), ingest: bool = True, language: str | None = None
+    ) -> MediaResponse:
+        """Transcribes speech and (unless ``ingest=false``) adds the
+        transcript, with timestamps, to the knowledge base. ``language``
+        (the UI language) helps when the speech's language is unclear."""
+        if agent.tools.get("transcribe_audio") is None:
             raise HTTPException(
                 status_code=503, detail="audio tool unavailable (install the `audio` extra)"
             )
+        source = Path(file.filename or "audio").name
         tmp_path = await _save_limited(file, settings.max_media_upload_mb)
         try:
-            transcript = await asyncio.to_thread(tool.run, audio_path=tmp_path)
+            analysis = await asyncio.to_thread(_transcribe_audio, tmp_path, language)
         finally:
             Path(tmp_path).unlink(missing_ok=True)
-        return {"transcript": transcript}
+        result = await asyncio.to_thread(_ingest_media, analysis, source, ingest)
+        result.transcript = result.text
+        return result
 
-    @app.post("/api/media/video")
-    async def media_video(file: UploadFile = File(...)) -> dict:
-        tool = agent.tools.get("analyze_video")
-        if tool is None:
+    @app.post("/api/media/video", response_model=MediaResponse)
+    async def media_video(
+        file: UploadFile = File(...), ingest: bool = True, language: str | None = None
+    ) -> MediaResponse:
+        """Finds the scenes of a video, reads their on-screen text,
+        transcribes the speech and (unless ``ingest=false``) adds the
+        resulting timeline to the knowledge base. ``language`` (the UI
+        language) helps when neither the speech nor the on-screen text
+        makes the language clear."""
+        if agent.tools.get("analyze_video") is None:
             raise HTTPException(
                 status_code=503, detail="video tool unavailable (install the `video` extra)"
             )
+        source = Path(file.filename or "video").name
         tmp_path = await _save_limited(file, settings.max_media_upload_mb)
         try:
-            analysis = await asyncio.to_thread(tool.run, video_path=tmp_path)
+            analysis = await asyncio.to_thread(_analyze_video, tmp_path, language)
+        except (RuntimeError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         finally:
             Path(tmp_path).unlink(missing_ok=True)
-        return {"analysis": analysis}
+        result = await asyncio.to_thread(_ingest_media, analysis, source, ingest)
+        result.analysis = result.text
+        return result
 
     if _STATIC_DIR.exists():
         app.mount("/", _NoCacheStaticFiles(directory=_STATIC_DIR, html=True), name="static")
