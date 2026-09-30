@@ -4,6 +4,83 @@ All notable changes to this project are documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this
 project uses [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-09-30
+
+### Added
+
+- **Video into the knowledge base.** An uploaded video becomes a timeline
+  -- each scene (slide, screen) with its time range, its on-screen text
+  and the speech heard while it was shown -- and is added to the knowledge
+  base one passage per scene, so questions about it are answered with the
+  moment cited (`[00:14–00:21]`). Audio files are transcribed and added
+  the same way. Uploading the same file twice doesn't duplicate it;
+  `?ingest=false` only analyzes.
+- The speech of a video's audio track is transcribed (`faster-whisper`,
+  the `audio` extra); a video without sound is not sent to it. When
+  Whisper isn't sure which language it hears, the language of the
+  on-screen text -- or else the UI language -- decides (measured: a
+  Russian voice guessed as Georgian at 31% came out as gibberish; with the
+  hint, as Russian). When voice detection hears nothing, the audio is
+  transcribed once more without it, keeping only segments Whisper is
+  confident in; a sound track with no speech is reported as such.
+- On-screen text in all nine UI languages (`COGNIVORE_OCR_LANGUAGES=auto`,
+  the new default): each frame is read with the Tesseract packs of its own
+  script, so a video may switch language. The Docker image ships all nine
+  packs.
+- The UI explains what couldn't be done and why -- no Tesseract, a missing
+  language pack, no speech model, a video cut short -- instead of showing
+  nothing.
+- `MediaResponse` for `POST /api/media/video` and `/api/media/audio`:
+  `text`, `duration`, `scenes`, `speech_language`, `ocr_languages`,
+  `notes`, `chunks_added`, `total_chunks` (`analysis` / `transcript` are
+  kept for existing clients).
+
+### Changed
+
+- Scene detection compares frames pixel by pixel (sampled twice a second)
+  instead of by brightness histogram, and waits for a transition to settle.
+  Measured on test videos: slides on one background 5/5 (was 1/5),
+  crossfades 3/3 (was 1/3), 40 template slides 40/40 (was 1/40); bullets
+  revealed one by one make one scene.
+- OCR output is cleaned: bullet glyphs misread as symbols or letters are
+  dropped, Cyrillic words misread as look-alike Latin letters are restored
+  ("Ha" -> "на").
+- The default speech model is `small` (~480 MB) instead of `base`
+  (~150 MB): `base` often mishears non-English speech. Set
+  `COGNIVORE_WHISPER_MODEL_SIZE=base` for the smaller, faster one.
+- `COGNIVORE_VIDEO_MAX_KEYFRAMES` defaults to 200 (was 24);
+  `COGNIVORE_VIDEO_SCENE_THRESHOLD` is now a per-pixel brightness change.
+- The README (all nine languages) shows the full `docker run` command for
+  the prebuilt image, and documents audio and video.
+
+### Fixed
+
+- Lexical search (BM25 and the offline hashing embedder) matches other
+  forms of a word -- "квартале" / "квартал", "тарифы" / "тариф",
+  "refunds" / "refund" -- via Snowball stemmers cut to six letters (new
+  dependency: `snowballstemmer`). Live finding: "Куда компания выходит в
+  следующем квартале?" ranked a passage that merely said "компания" above
+  the video slide "Планы на следующий квартал · Запуск в Казахстане".
+- Speech transcription works again with PyAV 18 and later: faster-whisper
+  1.2.1 passes PyAV an argument it no longer accepts, so every audio and
+  video file failed to transcribe. Cognivore now decodes the audio itself.
+  The transcription tests skip only when the Whisper model can't be
+  downloaded; they used to skip on any error, which is how this went
+  unnoticed.
+- A question about a document now counts as answered when it uses another
+  form of the passage's words ("тариф" / "Тарифы", "refund" / "refunds");
+  before, such questions could be reported as knowledge gaps.
+- Topic names on the knowledge map skip words found in every topic
+  (boilerplate such as a company name).
+- Sources that scored next to nothing are no longer listed under an answer.
+- The published Docker image seeds the demo handbooks on a fresh knowledge
+  base, the same as `docker compose`; a plain `docker run` used to open
+  with an empty one. Pass `-e COGNIVORE_SEED_DEMO_KB=false` to start empty.
+- Asking before any document was added gets the "knowledge base is empty"
+  reply in the language of the question, not a fixed English sentence.
+- A missing Tesseract language pack no longer makes on-screen text silently
+  disappear.
+
 ## [0.2.0] - 2026-09-28
 
 ### Added
@@ -265,5 +342,6 @@ project uses [Semantic Versioning](https://semver.org/).
   over the compose network) actually needed that port published to the
   host at all, so the mapping is simply gone rather than moved.
 
+[0.3.0]: https://github.com/Anton-Sergeev-EA/Cognivore/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Anton-Sergeev-EA/Cognivore/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Anton-Sergeev-EA/Cognivore/tree/212e495a5b0d48f21236dd85476599e216d9ec80

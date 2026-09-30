@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cognivore"
-version = "0.2.0"
+version = "0.3.0"
 description = "Explainable, local-first AI over your own documents: a torch-free agent framework (LLM + RAG, hand-written C++ vector index) with a knowledge map, answer grounding and a knowledge-gap radar, with a UI in 9 languages."
 readme = "README.md"
 requires-python = ">=3.10"
