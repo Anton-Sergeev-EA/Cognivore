@@ -391,7 +391,7 @@ mypy -p cognivore
 
 Ogni controllo elencato sopra è esattamente ciò che esegue la CI
 (`.github/workflows/ci.yml`), su Ubuntu/macOS/Windows e Python
-3.10-3.12; i test che dipendono solo dall'estensione nativa vengono
+3.10-3.14; i test che dipendono solo dall'estensione nativa vengono
 saltati automaticamente (invece di fallire) sulle configurazioni della
 matrice in cui il toolchain C++ non è disponibile, replicando lo stesso
 comportamento di fallback che ha il pacchetto stesso.

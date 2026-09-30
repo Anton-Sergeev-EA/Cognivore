@@ -390,7 +390,7 @@ mypy -p cognivore
 
 Alles oben Genannte ist genau das, was CI ausführt
 (`.github/workflows/ci.yml`), über Ubuntu/macOS/Windows und Python
-3.10-3.12 hinweg; Tests, die ausschließlich die native Erweiterung
+3.10-3.14 hinweg; Tests, die ausschließlich die native Erweiterung
 betreffen, überspringen sich selbst (statt zu scheitern) auf einem
 Matrix-Zweig, auf dem die C++-Toolchain nicht verfügbar ist -- genau wie
 sich das Paket selbst verhält.

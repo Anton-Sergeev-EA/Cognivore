@@ -381,7 +381,7 @@ mypy -p cognivore
 因此您的 `.env` 和本地运行的 Ollama 都不会影响测试结果（`tests/conftest.py`）。
 
 以上每一项检查正是 CI（`.github/workflows/ci.yml`）在
-Ubuntu/macOS/Windows 与 Python 3.10-3.12 上运行的内容；在矩阵中没有
+Ubuntu/macOS/Windows 与 Python 3.10-3.14 上运行的内容；在矩阵中没有
 C++ 工具链的那一环上，仅依赖原生扩展的测试会自行跳过（而不是失败），
 这与软件包本身的回退行为保持一致。
 

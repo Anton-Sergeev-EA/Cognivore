@@ -387,7 +387,7 @@ mypy -p cognivore
 ```
 
 Todo lo anterior es exactamente lo que ejecuta la CI
-(`.github/workflows/ci.yml`), en Ubuntu/macOS/Windows y Python 3.10-3.12;
+(`.github/workflows/ci.yml`), en Ubuntu/macOS/Windows y Python 3.10-3.14;
 los tests que dependen únicamente de la extensión nativa se omiten a sí
 mismos (en lugar de fallar) en la variante de la matriz donde no está
 disponible la cadena de herramientas de C++, imitando el mismo

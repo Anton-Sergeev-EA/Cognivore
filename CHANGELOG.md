@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this
 project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- CI tests Python 3.13 and 3.14 as well (the Docker image already runs on
+  3.14); both are listed as supported.
+
 ## [0.3.0] - 2026-09-30
 
 ### Added
@@ -342,6 +349,7 @@ project uses [Semantic Versioning](https://semver.org/).
   over the compose network) actually needed that port published to the
   host at all, so the mapping is simply gone rather than moved.
 
+[Unreleased]: https://github.com/Anton-Sergeev-EA/Cognivore/compare/v0.3.0...HEAD
 [0.3.0]: https://github.com/Anton-Sergeev-EA/Cognivore/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Anton-Sergeev-EA/Cognivore/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Anton-Sergeev-EA/Cognivore/tree/212e495a5b0d48f21236dd85476599e216d9ec80

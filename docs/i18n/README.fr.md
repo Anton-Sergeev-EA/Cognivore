@@ -397,7 +397,7 @@ mypy -p cognivore
 
 Chacune des vérifications ci-dessus est exactement ce que lance la CI
 (`.github/workflows/ci.yml`), sur Ubuntu/macOS/Windows et Python
-3.10-3.12 ; les tests dépendant uniquement de l'extension native se
+3.10-3.14 ; les tests dépendant uniquement de l'extension native se
 sautent eux-mêmes (plutôt que d'échouer) sur une configuration de la
 matrice où la toolchain C++ n'est pas disponible, reproduisant ainsi le
 même comportement de repli que le paquet lui-même.

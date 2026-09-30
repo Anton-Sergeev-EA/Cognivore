@@ -435,7 +435,7 @@ variables cleared and the offline backend and embedder, so neither your
 `.env` nor a locally running Ollama affects it (`tests/conftest.py`).
 
 Every check above is what CI runs (`.github/workflows/ci.yml`), across
-Ubuntu/macOS/Windows and Python 3.10-3.12; native-extension-only tests skip
+Ubuntu/macOS/Windows and Python 3.10-3.14; native-extension-only tests skip
 themselves (rather than fail) on a matrix leg where the C++ toolchain isn't
 available, matching the same fallback behavior the package itself has.
 
