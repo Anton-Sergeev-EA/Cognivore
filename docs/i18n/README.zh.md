@@ -146,37 +146,41 @@ cognivore chat           # 会自动识别正在运行的 Ollama 服务器
 音频/视频工具需要单独的 extras：`pip install -e ".[audio,video]"`（或
 使用 `.[all]` 安装全部内容，包括 GGUF）。所有配置项详见 `.env.example`。
 
-视频工具中的屏幕文字提取功能（`analyze_video`）同样需要
-[Tesseract](https://github.com/tesseract-ocr/tesseract) OCR *二进制程
-序* 本身——`video` extra 拉取的 `pytesseract` 包只是它的一层薄封装，缺
-少这个二进制程序时 OCR 会静默地返回空文本（场景检测和时间戳不受影响，
-仍能照常工作，因为那部分完全由 OpenCV 完成）。它默认识别英语*和*俄语（
-`eng+rus`，参见 `.env.example` 中的 `COGNIVORE_OCR_LANGUAGES`）——在
-Debian/Ubuntu 上，普通的 `tesseract-ocr` 包会自动带上 `eng`，但不会带
-上 `rus`，因此需要显式安装两者：
+### 音频与视频
+
+把视频拖进 Web 界面（或发送到 `POST /api/media/video`），Cognivore 会把它
+整理成时间线并加入知识库——可以像对待其他文档一样提问，回答会标出对应的
+时刻（`[00:14–00:21]`）：
+
+- 通过比较画面找出**场景**（幻灯片、屏幕），包括亮度比较会漏掉的情况：
+  同一背景上换了一页、淡入淡出、逐条出现的要点、只差一个数字的模板页；
+- 每个场景的**屏幕文字**由 Tesseract 识别，每一帧都使用对应的语言——
+  支持界面的全部九种语言，视频中途切换语言也没问题；
+- **语音**由 `faster-whisper` 转写，并归到当时正在显示的那一页下面。
+
+音频文件（`POST /api/media/audio`）同样会被转写并加入知识库。同一文件
+重复上传不会产生重复内容；`?ingest=false` 表示只分析、不加入。全部在
+CPU 上运行，不需要 PyTorch。
+
+识别屏幕文字需要 [Tesseract](https://github.com/tesseract-ocr/tesseract)
+OCR *二进制程序*以及每种语言的语言包（`video` 扩展只安装 Python 封装）：
 
 ```bash
-sudo apt install tesseract-ocr tesseract-ocr-rus   # Debian/Ubuntu
-brew install tesseract                              # macOS —— 自带所有语言
-# Windows: https://github.com/UB-Mannheim/tesseract/wiki (在安装向导的语言列表中勾选俄语)
+# Debian/Ubuntu
+sudo apt install tesseract-ocr tesseract-ocr-rus tesseract-ocr-chi-sim tesseract-ocr-spa \
+  tesseract-ocr-hin tesseract-ocr-fra tesseract-ocr-deu tesseract-ocr-jpn tesseract-ocr-ita
+brew install tesseract tesseract-lang   # macOS
+# Windows：https://github.com/UB-Mannheim/tesseract/wiki（在安装程序中勾选语言）
 ```
 
-Docker 镜像已经内置了两者，无需额外安装。
+`COGNIVORE_OCR_LANGUAGES=auto`（默认）会使用九种语言中所有已安装的语言包。
+如果缺少 Tesseract 或指定的语言包，界面会明确提示，而不是悄悄返回空结果。
+Whisper 模型（`small`，约 480 MB）会在第一次转写语音时从 Hugging Face 下载。
+Docker 镜像已包含全部组件。
 
-请求一种尚未安装训练数据包的语言并不会报错——它会静默地把该文字识别成形
-近的拉丁字母（西里尔文“Контейнеры”会被识别成“KoHTewHepbi”），看起来像
-是扫描质量差，而非缺少语言包。如果你的屏幕文字使用其他语言，请安装对应
-的 `tesseract-ocr-<lang>` 包，并将其加入 `COGNIVORE_OCR_LANGUAGES`（例
-如 `eng+rus+deu`）。
-
-`analyze_video` 的 OCR 针对的是它自身工具说明中列出的内容——录屏演示、讲
-座录像、幻灯片视频——这类场景下文字通常又大又经过精心排版。而在原始
-的终端/IDE 屏幕录像上，情况就糟糕得多：等宽字体很小，在本工具据以切分
-场景的画面切换处视频压缩格外严重，还有 OCR 模型从未训练过的框线绘制
-字符或符号字形。一旦压缩已经丢弃了细节，在 OCR 之前对画面做放大或阈
-值化处理也不能可靠地改善结果——这是经过实测确认的，而不是凭空假设。
-如果你确实想让屏幕上的终端/代码文字被准确识别，请用更大的字号和/或
-更高的分辨率录制；这才是真正管用的办法，而不是事后的后处理。
+Cognivore 能“读”视频，但不能“看懂”画面：既没有文字也没有语音的视频，
+没有可检索的内容。在高度压缩的录屏中，细小的等宽字体识别效果较差——
+录制终端和代码时请使用更大的字号，这比事后处理图像更有效。
 
 ### Docker
 
@@ -264,6 +268,8 @@ docker compose up -d  # 重新启动 —— 除非镜像本身发生变化，否
 
 ```bash
 docker pull ghcr.io/anton-sergeev-ea/cognivore:latest
+docker run --rm -p 8420:8420 -v cognivore-data:/data ghcr.io/anton-sergeev-ea/cognivore:latest
+# → http://127.0.0.1:8420
 ```
 
 ## 使用方法

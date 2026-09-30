@@ -128,48 +128,50 @@ Las herramientas de audio/vídeo necesitan sus propios extras:
 `pip install -e ".[audio,video]"` (o `.[all]` para todo, GGUF incluido).
 Consulta `.env.example` para ver todas las opciones de configuración.
 
-La extracción de texto en pantalla de la herramienta de vídeo
-(`analyze_video`) necesita además el *binario* de OCR de
-[Tesseract](https://github.com/tesseract-ocr/tesseract) -- el paquete
-`pytesseract` que trae el extra `video` no es más que un envoltorio fino
-alrededor de él, y sin él el OCR no devuelve texto silenciosamente (la
-detección de escenas y las marcas de tiempo funcionan igual, ya que esa
-parte es puro OpenCV). Por defecto reconoce inglés *y* ruso (`eng+rus`,
-ver `COGNIVORE_OCR_LANGUAGES` en `.env.example`) -- en Debian/Ubuntu el
-paquete `tesseract-ocr` normal trae `eng` automáticamente pero no `rus`,
-así que instala ambos explícitamente:
+### Audio y vídeo
+
+Arrastra un vídeo a la interfaz web (o envíalo a `POST /api/media/video`) y
+Cognivore lo convierte en una línea de tiempo y lo añade a la base de
+conocimiento: puedes preguntar por él como por cualquier documento, y la
+respuesta cita el momento (`[00:14–00:21]`):
+
+- las **escenas** (diapositivas, pantallas) se detectan comparando
+  fotogramas, incluido lo que una comparación de brillo pasa por alto: un
+  cambio de diapositiva sobre el mismo fondo, fundidos, viñetas que
+  aparecen una a una, diapositivas de plantilla que solo difieren en un
+  número;
+- el **texto en pantalla** de cada escena se lee con Tesseract, fotograma a
+  fotograma en el idioma correcto: los nueve idiomas de la interfaz, y el
+  vídeo puede cambiar de uno a otro;
+- la **voz** se transcribe con `faster-whisper` y se coloca bajo la
+  diapositiva que estaba en pantalla en ese momento.
+
+Los archivos de audio (`POST /api/media/audio`) se transcriben y se añaden
+igual. Subir el mismo archivo dos veces no lo duplica; `?ingest=false`
+solo lo analiza. Todo funciona en la CPU, sin PyTorch.
+
+El texto en pantalla necesita el *binario* de OCR
+[Tesseract](https://github.com/tesseract-ocr/tesseract) y un paquete por
+idioma (el extra `video` solo instala el envoltorio de Python):
 
 ```bash
-sudo apt install tesseract-ocr tesseract-ocr-rus   # Debian/Ubuntu
-brew install tesseract                              # macOS -- trae todos los idiomas juntos
-# Windows: https://github.com/UB-Mannheim/tesseract/wiki (marca ruso en la lista de idiomas del instalador)
+# Debian/Ubuntu
+sudo apt install tesseract-ocr tesseract-ocr-rus tesseract-ocr-chi-sim tesseract-ocr-spa \
+  tesseract-ocr-hin tesseract-ocr-fra tesseract-ocr-deu tesseract-ocr-jpn tesseract-ocr-ita
+brew install tesseract tesseract-lang   # macOS
+# Windows: https://github.com/UB-Mannheim/tesseract/wiki (marca los idiomas en el instalador)
 ```
 
-La imagen de Docker ya incluye ambos -- no hay nada que instalar ahí.
+`COGNIVORE_OCR_LANGUAGES=auto` (por defecto) usa todos los paquetes
+instalados de los nueve idiomas. Si falta Tesseract o un paquete indicado,
+la interfaz lo dice en lugar de devolver nada en silencio. El modelo
+Whisper (`small`, ~480 MB) se descarga de Hugging Face la primera vez que se
+transcribe voz. La imagen de Docker lo incluye todo.
 
-Pedir un idioma cuyo paquete de datos entrenados no está instalado no da
-error -- simplemente reconoce mal esa escritura como letras latinas
-parecidas (el cirílico "Контейнеры" sale como "KoHTewHepbi"), lo que
-parece un escaneo defectuoso en vez de un paquete de idioma que falta. Si
-tu texto en pantalla usa otro idioma, instala su paquete
-`tesseract-ocr-<lang>` y añádelo a `COGNIVORE_OCR_LANGUAGES` (por ejemplo,
-`eng+rus+deu`).
-
-El OCR de `analyze_video` está pensado para el tipo de contenido que
-menciona la propia descripción de la herramienta -- screencasts,
-grabaciones de clases, vídeos basados en diapositivas -- donde el texto es
-grande y está compuesto de forma deliberada. El panorama es mucho más
-cuesta arriba con una grabación de pantalla en crudo de una terminal o un
-IDE: fuente monoespaciada pequeña, compresión de vídeo agresiva justo en
-los cortes de escena de los que depende esta herramienta, y glifos de
-caracteres de dibujo de cajas o símbolos con los que los modelos de OCR
-nunca se entrenaron. Ampliar la resolución o aplicar umbralización al
-fotograma antes del OCR no ayuda de forma fiable una vez que la compresión
-ya ha eliminado el detalle fino -- esto se comprobó haciendo pruebas, no
-se asume sin más. Si lo que quieres específicamente es que el texto de
-terminal o de código en pantalla se reconozca bien con OCR, grábalo con un
-tamaño de fuente mayor y/o una resolución más alta; esa es la palanca que
-realmente funciona, no el post-procesado posterior.
+Cognivore lee el vídeo, pero no lo *ve*: un vídeo sin texto ni voz no deja
+nada que buscar. El texto monoespaciado pequeño de una grabación de
+pantalla muy comprimida se lee mal: graba terminales y código con una
+fuente más grande; eso ayuda donde el posprocesado de la imagen no.
 
 ### Docker
 
@@ -266,6 +268,8 @@ Apple Silicon y Raspberry Pi) en GHCR mediante
 
 ```bash
 docker pull ghcr.io/anton-sergeev-ea/cognivore:latest
+docker run --rm -p 8420:8420 -v cognivore-data:/data ghcr.io/anton-sergeev-ea/cognivore:latest
+# → http://127.0.0.1:8420
 ```
 
 ## Uso

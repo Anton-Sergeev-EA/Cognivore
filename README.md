@@ -170,42 +170,48 @@ Audio/video tools need their own extras: `pip install -e ".[audio,video]"`
 (or `.[all]` for everything, GGUF included). See `.env.example` for every
 setting.
 
-On-screen text extraction in the video tool (`analyze_video`) needs the
-[Tesseract](https://github.com/tesseract-ocr/tesseract) OCR *binary* as
-well -- the `pytesseract` package pulled in by the `video` extra is just a
-thin wrapper around it, and OCR silently returns no text without it (scene
-detection and timestamps still work either way, since that part is pure
-OpenCV). By default it recognizes English *and* Russian (`eng+rus`, see
-`COGNIVORE_OCR_LANGUAGES` in `.env.example`) -- on Debian/Ubuntu the plain
-`tesseract-ocr` package pulls in `eng` automatically but not `rus`, so
-install both explicitly:
+### Audio and video
+
+Drop a video into the web UI (or `POST /api/media/video`) and Cognivore
+turns it into a timeline and adds it to the knowledge base -- ask about it
+like any other document, and the answer cites the moment (`[00:14–00:21]`):
+
+- **scenes** (slides, screens) are found by comparing frames, which also
+  catches what a brightness comparison misses: a slide change on the same
+  background, crossfades, bullets revealed one by one, template slides
+  that differ in a single number;
+- the **on-screen text** of each scene is read with Tesseract, frame by
+  frame in the right language -- all nine UI languages, and a video may
+  switch between them;
+- the **speech** is transcribed with `faster-whisper` and placed under the
+  slide that was on screen at the time.
+
+Audio files (`POST /api/media/audio`) are transcribed and added the same
+way. Uploading the same file twice doesn't duplicate it; `?ingest=false`
+only analyzes. Everything runs on the CPU, without PyTorch.
+
+On-screen text needs the [Tesseract](https://github.com/tesseract-ocr/tesseract)
+OCR *binary* and a language pack per language (the `video` extra only
+installs the Python wrapper):
 
 ```bash
-sudo apt install tesseract-ocr tesseract-ocr-rus   # Debian/Ubuntu
-brew install tesseract                              # macOS -- ships every language together
-# Windows: https://github.com/UB-Mannheim/tesseract/wiki (tick Russian in the installer's language list)
+# Debian/Ubuntu
+sudo apt install tesseract-ocr tesseract-ocr-rus tesseract-ocr-chi-sim tesseract-ocr-spa \
+  tesseract-ocr-hin tesseract-ocr-fra tesseract-ocr-deu tesseract-ocr-jpn tesseract-ocr-ita
+brew install tesseract tesseract-lang   # macOS
+# Windows: https://github.com/UB-Mannheim/tesseract/wiki (tick the languages in the installer)
 ```
 
-The Docker image already includes both -- nothing to install there.
+`COGNIVORE_OCR_LANGUAGES=auto` (the default) uses every installed pack of
+the nine languages. If Tesseract or a listed pack is missing, the UI says
+so instead of quietly returning nothing. The Whisper model (`small`,
+~480 MB) is downloaded from Hugging Face the first time speech is
+transcribed. The Docker image ships everything.
 
-Requesting a language whose trained-data package isn't installed doesn't
-error out -- it silently mis-recognizes that script as look-alike Latin
-letters (Cyrillic "Контейнеры" comes out as "KoHTewHepbi"), which reads
-like a bad scan rather than a missing language pack. If your on-screen
-text uses another language, install its `tesseract-ocr-<lang>` package
-and add it to `COGNIVORE_OCR_LANGUAGES` (e.g. `eng+rus+deu`).
-
-`analyze_video`'s OCR is aimed at the content its own tool description
-names -- screencasts, lecture recordings, slide-based videos -- where text
-is large and deliberately composed. It's a much rougher ride on a raw
-terminal/IDE screen recording: small monospace font, heavy video
-compression right at the scene cuts this tool keys off of, and box-drawing
-or symbol glyphs OCR models were never trained on. Upscaling or
-thresholding the frame before OCR doesn't reliably help once compression
-has already thrown away the fine detail -- confirmed by testing it, not
-assumed. If you specifically want on-screen terminal/code text to OCR
-well, record at a larger font size and/or higher resolution; that's the
-lever that actually works, not post-processing after the fact.
+Cognivore reads video; it doesn't *see* it: footage with neither text nor
+speech gives nothing to search. Small monospace text in a heavily
+compressed screen recording is read poorly -- record terminals and code
+at a larger font size, that helps where image post-processing doesn't.
 
 ### Docker
 
@@ -295,6 +301,8 @@ GHCR by [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publis
 
 ```bash
 docker pull ghcr.io/anton-sergeev-ea/cognivore:latest
+docker run --rm -p 8420:8420 -v cognivore-data:/data ghcr.io/anton-sergeev-ea/cognivore:latest
+# → http://127.0.0.1:8420
 ```
 
 ## Usage

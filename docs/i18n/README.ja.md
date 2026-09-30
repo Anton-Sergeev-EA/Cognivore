@@ -119,44 +119,49 @@ cognivore chat           # 動作中の Ollama サーバーを自動的に検出
 (GGUF を含めすべてが必要な場合は `.[all]`)。設定項目の一覧は `.env.example` を参照して
 ください。
 
-動画ツール(`analyze_video`)での画面内テキスト抽出には、
-[Tesseract](https://github.com/tesseract-ocr/tesseract) OCR *バイナリ*本体も
-必要です —— `video` extra が導入する `pytesseract` パッケージは、あくまで
-その薄いラッパーに過ぎず、これが無いと OCR は何も検出できず黙って空の結果を
-返します(シーン検出とタイムスタンプは純粋な OpenCV の処理なので、いずれの
-場合でも問題なく動作します)。デフォルトでは英語*と*ロシア語(`eng+rus`、
-`.env.example` の `COGNIVORE_OCR_LANGUAGES` を参照)を認識します —— Debian/Ubuntu
-では素の `tesseract-ocr` パッケージが `eng` を自動的に導入しますが `rus` は
-導入しないため、両方を明示的にインストールしてください:
+### 音声と動画
+
+Web UI に動画をドロップする(または `POST /api/media/video` に送る)と、
+Cognivore はそれをタイムラインにしてナレッジベースに追加します。ほかの
+ドキュメントと同じように質問でき、回答には該当する時刻
+(`[00:14–00:21]`)が示されます:
+
+- **シーン**(スライド、画面)はフレームの比較で見つけます。明るさの比較
+  では見逃すもの――同じ背景でのスライド切り替え、クロスフェード、1 項目
+  ずつ現れる箇条書き、数字が一つだけ違うテンプレートのスライド――も検出
+  します;
+- 各シーンの**画面上のテキスト**は Tesseract で、フレームごとに正しい言語で
+  読み取ります。UI の 9 言語すべてに対応し、動画の途中で言語が変わっても
+  かまいません;
+- **音声**は `faster-whisper` で文字起こしし、その時に映っていたスライドの
+  下に配置します。
+
+音声ファイル(`POST /api/media/audio`)も同じように文字起こしして追加
+されます。同じファイルを 2 回アップロードしても重複しません。
+`?ingest=false` は解析のみ行います。すべて CPU 上で、PyTorch なしで動きます。
+
+画面上のテキストには [Tesseract](https://github.com/tesseract-ocr/tesseract)
+OCR の*バイナリ*と、言語ごとの言語パックが必要です(`video` extra は
+Python ラッパーだけをインストールします):
 
 ```bash
-sudo apt install tesseract-ocr tesseract-ocr-rus   # Debian/Ubuntu
-brew install tesseract                              # macOS —— すべての言語がまとめて入ります
-# Windows: https://github.com/UB-Mannheim/tesseract/wiki(インストーラーの言語一覧でロシア語にチェック)
+# Debian/Ubuntu
+sudo apt install tesseract-ocr tesseract-ocr-rus tesseract-ocr-chi-sim tesseract-ocr-spa \
+  tesseract-ocr-hin tesseract-ocr-fra tesseract-ocr-deu tesseract-ocr-jpn tesseract-ocr-ita
+brew install tesseract tesseract-lang   # macOS
+# Windows: https://github.com/UB-Mannheim/tesseract/wiki (インストーラーで言語を選択)
 ```
 
-Docker イメージには両方とも最初から含まれているため、そちらでは何もインストール
-する必要はありません。
+`COGNIVORE_OCR_LANGUAGES=auto`(既定)は、9 言語のうちインストール済みの
+パックをすべて使います。Tesseract や指定したパックがない場合、黙って空の
+結果を返すのではなく、UI にその旨が表示されます。Whisper モデル(`small`、
+約 480 MB)は、最初に音声を文字起こしする時に Hugging Face から
+ダウンロードされます。Docker イメージにはすべて含まれています。
 
-学習済みデータパッケージが入っていない言語を指定してもエラーにはならず ——
-その文字種を見た目が似ているラテン文字として黙って誤認識します(キリル文字の
-「Контейнеры」は「KoHTewHepbi」になります)。これは言語パックの欠落というより、
-スキャン品質が悪いように見えます。画面内テキストが別の言語を使っている場合は、
-対応する `tesseract-ocr-<lang>` パッケージをインストールし、
-`COGNIVORE_OCR_LANGUAGES` に追加してください(例:`eng+rus+deu`)。
-
-`analyze_video` の OCR が想定しているのは、このツール自身の説明が名指し
-している用途 —— スクリーンキャスト、講義の録画、スライド形式の動画 ——
-であり、そこではテキストが大きく、意図的に読みやすく構成されています。
-生のターミナル/IDE 画面録画ではずっと厳しい戦いになります: 小さな等幅
-フォント、このツールがシーン検出の起点とするまさにその場面転換で強くかかる
-動画圧縮、そして OCR モデルが一度も学習したことのない罫線素片や記号
-グリフが原因です。圧縮によって細部の情報が既に失われてしまった後では、
-OCR の前にフレームを拡大したり二値化したりしても確実な改善は得られません
-—— これは推測ではなく、実際にテストして確認した結果です。画面上のターミ
-ナル/コードのテキストを OCR できちんと読み取りたいのであれば、より大きな
-フォントサイズや高い解像度で録画してください。実際に効くのはそのレバーで
-あり、事後の後処理ではありません。
+Cognivore は動画を「読み」ますが、「見て」はいません。テキストも音声もない
+映像には検索できるものがありません。強く圧縮された画面録画の小さな等幅
+フォントは読み取り精度が落ちます。ターミナルやコードは大きめのフォントで
+録画してください。画像の後処理よりも効果があります。
 
 ### Docker
 
@@ -249,6 +254,8 @@ GHCR に公開されています:
 
 ```bash
 docker pull ghcr.io/anton-sergeev-ea/cognivore:latest
+docker run --rm -p 8420:8420 -v cognivore-data:/data ghcr.io/anton-sergeev-ea/cognivore:latest
+# → http://127.0.0.1:8420
 ```
 
 ## 使い方

@@ -36,7 +36,7 @@ flowchart TB
         CALC["CalculatorTool\n(AST-safe eval)"]
         RAGT["RagSearchTool"]
         AUDIO["AudioTranscribeTool\n(faster-whisper)"]
-        VIDEO["VideoAnalyzeTool\n(OpenCV + OCR)"]
+        VIDEO["VideoAnalyzeTool\n(scenes + OCR + speech)"]
     end
 
     subgraph RAG["cognivore.rag"]
@@ -63,6 +63,7 @@ flowchart TB
     SSE --> LOOP
     MEDIA --> AUDIO
     MEDIA --> VIDEO
+    MEDIA -- "timeline with timestamps" --> STORE
 
     LOOP --> LLAMA
     LOOP --> FAKE
@@ -197,8 +198,9 @@ still beat it outright. The roadmap below tracks closing that gap.
       the docstring in `native/vector_index.hpp` is explicit about).
 - [ ] Real speaker diarization (pyannote) behind the same
       `diarize_by_energy` interface, as a heavier optional extra.
-- [ ] A lightweight CPU-friendly captioning model as an alternative to the
-      keyframe+OCR heuristic in `cognivore.media.video`.
+- [ ] A lightweight CPU-friendly captioning model for footage with neither
+      on-screen text nor speech (the scene + OCR + speech timeline in
+      `cognivore.media.video` covers slides, screens and talks).
 - [ ] Persist `VectorMemory` across process restarts (currently in-memory
       only within a single `cognivore chat` / `serve` session).
 - [ ] `cibuildwheel`-based prebuilt wheels so `pip install cognivore` works

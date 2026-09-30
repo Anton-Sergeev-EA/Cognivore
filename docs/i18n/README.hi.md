@@ -125,47 +125,46 @@ cognivore chat           # picks up the running Ollama server automatically
 `pip install -e ".[audio,video]"` (या सब कुछ के लिए `.[all]`, GGUF
 शामिल)। हर सेटिंग के लिए `.env.example` देखें।
 
-वीडियो टूल (`analyze_video`) में ऑन-स्क्रीन टेक्स्ट एक्सट्रैक्शन के लिए
-[Tesseract](https://github.com/tesseract-ocr/tesseract) OCR *बाइनरी* भी
-चाहिए होती है -- `video` extra के साथ आने वाला `pytesseract` पैकेज तो बस
-इसके ऊपर एक पतला wrapper है, और इसके बिना OCR बिना किसी चेतावनी के कोई
-टेक्स्ट नहीं लौटाता (scene detection और timestamps दोनों तरीकों से चलते
-रहते हैं, क्योंकि वह हिस्सा शुद्ध रूप से OpenCV पर आधारित है)। डिफ़ॉल्ट रूप
-से यह English *और* Russian दोनों को पहचानता है (`eng+rus`, `.env.example`
-में `COGNIVORE_OCR_LANGUAGES` देखें) -- Debian/Ubuntu पर plain
-`tesseract-ocr` पैकेज `eng` को खुद-ब-खुद ले आता है, लेकिन `rus` को नहीं,
-इसलिए दोनों को अलग से इंस्टॉल करें:
+### ऑडियो और वीडियो
+
+वेब इंटरफ़ेस में वीडियो डालें (या `POST /api/media/video` पर भेजें) —
+Cognivore उसे एक टाइमलाइन में बदलकर नॉलेज बेस में जोड़ देता है। उसके बारे
+में किसी भी दस्तावेज़ की तरह सवाल पूछें, जवाब सही पल बताएगा (`[00:14–00:21]`):
+
+- **दृश्य** (स्लाइड, स्क्रीन) फ़्रेमों की तुलना से मिलते हैं — उनमें भी जो
+  चमक की तुलना से छूट जाते हैं: एक ही पृष्ठभूमि पर स्लाइड बदलना, क्रॉसफ़ेड,
+  एक-एक करके दिखने वाले बिंदु, सिर्फ़ एक संख्या से अलग टेम्पलेट स्लाइड;
+- हर दृश्य का **स्क्रीन टेक्स्ट** Tesseract से पढ़ा जाता है, हर फ़्रेम सही
+  भाषा में — इंटरफ़ेस की सभी नौ भाषाएँ, और वीडियो बीच में भाषा बदल सकता है;
+- **आवाज़** `faster-whisper` से ट्रांसक्राइब होती है और उस समय स्क्रीन पर
+  दिख रही स्लाइड के नीचे रखी जाती है।
+
+ऑडियो फ़ाइलें (`POST /api/media/audio`) भी इसी तरह ट्रांसक्राइब होकर जुड़ती
+हैं। एक ही फ़ाइल दोबारा अपलोड करने से दोहराव नहीं होता; `?ingest=false`
+सिर्फ़ विश्लेषण करता है। सब कुछ CPU पर चलता है, PyTorch के बिना।
+
+स्क्रीन टेक्स्ट के लिए [Tesseract](https://github.com/tesseract-ocr/tesseract)
+OCR *बाइनरी* और हर भाषा का भाषा पैकेज चाहिए (`video` extra सिर्फ़ Python
+रैपर इंस्टॉल करता है):
 
 ```bash
-sudo apt install tesseract-ocr tesseract-ocr-rus   # Debian/Ubuntu
-brew install tesseract                              # macOS -- सभी भाषाएँ साथ ही आती हैं
-# Windows: https://github.com/UB-Mannheim/tesseract/wiki (इंस्टॉलर की language list में Russian को टिक करें)
+# Debian/Ubuntu
+sudo apt install tesseract-ocr tesseract-ocr-rus tesseract-ocr-chi-sim tesseract-ocr-spa \
+  tesseract-ocr-hin tesseract-ocr-fra tesseract-ocr-deu tesseract-ocr-jpn tesseract-ocr-ita
+brew install tesseract tesseract-lang   # macOS
+# Windows: https://github.com/UB-Mannheim/tesseract/wiki (इंस्टॉलर में भाषाएँ चुनें)
 ```
 
-Docker इमेज में दोनों पहले से ही शामिल हैं -- वहाँ कुछ भी इंस्टॉल करने की
-ज़रूरत नहीं।
+`COGNIVORE_OCR_LANGUAGES=auto` (डिफ़ॉल्ट) नौ भाषाओं के सभी इंस्टॉल किए गए
+पैकेज इस्तेमाल करता है। अगर Tesseract या कोई बताया गया पैकेज नहीं है, तो
+इंटरफ़ेस यह साफ़ बताता है, चुपचाप खाली नतीजा नहीं देता। Whisper मॉडल
+(`small`, ~480 MB) पहली बार आवाज़ ट्रांसक्राइब करते समय Hugging Face से
+डाउनलोड होता है। Docker इमेज में सब कुछ पहले से है।
 
-जिस भाषा का trained-data पैकेज इंस्टॉल न हो, उसे रिक्वेस्ट करने पर एरर
-नहीं आता -- वह स्क्रिप्ट को चुपचाप मिलती-जुलती Latin letters में गलत
-पहचान लेता है (Cyrillic "Контейнеры" "KoHTewHepbi" के रूप में सामने आता
-है), जो missing language pack जैसा नहीं बल्कि एक खराब scan जैसा दिखता है।
-अगर आपके ऑन-स्क्रीन टेक्स्ट में कोई और भाषा है, तो उसका
-`tesseract-ocr-<lang>` पैकेज इंस्टॉल करें और उसे `COGNIVORE_OCR_LANGUAGES`
-में जोड़ें (जैसे `eng+rus+deu`)।
-
-`analyze_video` का OCR उस तरह के कंटेंट के लिए बनाया गया है जिसका ज़िक्र
-इस tool के अपने description में ही है -- screencasts, lecture recordings,
-slide-based videos -- जहाँ टेक्स्ट बड़ा और सोच-समझकर composed होता है।
-किसी raw terminal/IDE स्क्रीन रिकॉर्डिंग पर यह कहीं ज़्यादा rough साबित
-होता है: छोटा monospace font, ठीक उन scene cuts पर भारी video
-compression जिन्हें यह tool अपना आधार बनाता है, और box-drawing या symbol
-glyphs जिन पर OCR मॉडल कभी trained ही नहीं हुए। OCR से पहले frame को
-upscale या threshold करना भरोसे के साथ मदद नहीं करता, जब compression
-पहले ही fine detail गँवा चुका हो -- यह testing से confirm किया गया है,
-सिर्फ़ अनुमान नहीं। अगर आप specifically चाहते हैं कि on-screen
-terminal/code टेक्स्ट अच्छे से OCR हो, तो बड़े font size और/या ज़्यादा
-resolution पर रिकॉर्ड करें; यही असली lever है जो काम करता है, बाद में
-post-processing नहीं।
+Cognivore वीडियो को पढ़ता है, *देखता* नहीं: जिस वीडियो में न टेक्स्ट हो न
+आवाज़, उसमें खोजने को कुछ नहीं होता। बहुत ज़्यादा कंप्रेस की गई स्क्रीन
+रिकॉर्डिंग में छोटा मोनोस्पेस टेक्स्ट ठीक से नहीं पढ़ा जाता — टर्मिनल और कोड
+बड़े फ़ॉन्ट में रिकॉर्ड करें; यह वहाँ मदद करता है जहाँ इमेज प्रोसेसिंग नहीं करती।
 
 ### Docker
 
@@ -258,6 +257,8 @@ volumes `cognivore-data` और `ollama-data` में रहते हैं, 
 
 ```bash
 docker pull ghcr.io/anton-sergeev-ea/cognivore:latest
+docker run --rm -p 8420:8420 -v cognivore-data:/data ghcr.io/anton-sergeev-ea/cognivore:latest
+# → http://127.0.0.1:8420
 ```
 
 ## उपयोग
