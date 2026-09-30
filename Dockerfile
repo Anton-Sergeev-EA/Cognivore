@@ -23,22 +23,24 @@ LABEL org.opencontainers.image.title="cognivore" \
 WORKDIR /app
 
 # tesseract-ocr is the native OCR *binary* that pytesseract (installed below
-# via the `video` extra) shells out to -- the Python package alone can't do
-# OCR without it. Without this, on-screen text extraction in `analyze_video`
-# silently returns "" (the scene-detection/timestamps part still works, since
-# that's pure OpenCV). eng+rus matches this project's two primary languages
-# (see COGNIVORE_OCR_LANGUAGES / Settings.ocr_languages) -- confirmed live,
-# requesting a language whose trained-data package isn't installed doesn't
-# error out, it just quietly mis-recognizes that script as look-alike Latin
-# letters (e.g. Cyrillic "Контейнеры" read as "KoHTewHepbi"), which reads
-# like a low-quality scan rather than a missing language pack. So: if a
-# deployment's on-screen text uses another language, add its
-# `tesseract-ocr-<lang>` package here *and* that language to
-# COGNIVORE_OCR_LANGUAGES, or it'll get silently garbled the same way.
+# via the `video` extra) shells out to -- the Python package alone can't read
+# on-screen text without it. One trained-data pack per UI language (1-4 MB
+# each): with COGNIVORE_OCR_LANGUAGES=auto (the default) every frame is read
+# with the packs of its own script, so a video in any of the nine languages
+# -- or one that switches between them -- comes out right. Without the
+# matching pack a script isn't "read badly", it is misread as look-alike
+# letters of another one (Cyrillic "Контейнеры" as "KoHTewHepbi").
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     tesseract-ocr-eng \
     tesseract-ocr-rus \
+    tesseract-ocr-chi-sim \
+    tesseract-ocr-spa \
+    tesseract-ocr-hin \
+    tesseract-ocr-fra \
+    tesseract-ocr-deu \
+    tesseract-ocr-jpn \
+    tesseract-ocr-ita \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /build/dist/*.whl /tmp/
 # Deliberately `[audio,video]`, not `[all]`. `[all]` also pulls in `llm`
@@ -73,11 +75,16 @@ RUN WHEEL="$(ls /tmp/*.whl)" \
 # instead of once. FASTEMBED_CACHE_PATH does the same for the multilingual
 # text-embedding model (~220MB), which fastembed would otherwise keep in
 # /tmp and fetch again after every container recreate.
+# COGNIVORE_SEED_DEMO_KB matches docker-compose.yml: a plain `docker run`
+# of the published image opens with the demo handbooks instead of an empty
+# knowledge base. It only ever seeds an empty store, so it never touches
+# documents you've added; pass -e COGNIVORE_SEED_DEMO_KB=false to start empty.
 ENV COGNIVORE_HOST=0.0.0.0 \
     COGNIVORE_PORT=8420 \
     COGNIVORE_DATA_DIR=/data \
     HF_HOME=/data/hf-cache \
-    FASTEMBED_CACHE_PATH=/data/fastembed-cache
+    FASTEMBED_CACHE_PATH=/data/fastembed-cache \
+    COGNIVORE_SEED_DEMO_KB=true
 
 # Run as an unprivileged user rather than root -- this is a network-facing
 # service (even if usually only reachable on localhost/a private compose
