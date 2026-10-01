@@ -1,14 +1,14 @@
 version: 2
+# Automatic dependency pull requests are disabled; update dependencies manually.
 updates:
   # Python dependencies (pyproject.toml).
   - package-ecosystem: "pip"
     directory: "/"
+    open-pull-requests-limit: 0
     schedule:
       interval: "weekly"
     groups:
-      # One combined PR for routine bumps instead of a dozen separate
-      # ones -- a security-relevant update still opens on its own,
-      # unbatched, so it's never held up waiting for the next weekly PR.
+      # Keep routine Python updates grouped if automation is enabled again.
       python-dependencies:
         patterns:
           - "*"
@@ -16,11 +16,13 @@ updates:
   # The Dockerfile's own base image (python:3.11-slim).
   - package-ecosystem: "docker"
     directory: "/"
+    open-pull-requests-limit: 0
     schedule:
       interval: "weekly"
 
   # GitHub Actions used in .github/workflows/*.yml.
   - package-ecosystem: "github-actions"
     directory: "/"
+    open-pull-requests-limit: 0
     schedule:
       interval: "weekly"
