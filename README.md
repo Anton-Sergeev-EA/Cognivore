@@ -1,5 +1,23 @@
 # Cognivore
 
+**Local-first, explainable RAG/agent system with a hand-written C++ vector-search core, CPU-oriented retrieval, evidence mapping, and source-grounded answer verification.**
+
+> **Portfolio signal:** systems-oriented AI engineering beyond industrial OT — C++ performance work, retrieval architecture, Python orchestration, testing, and local deployment.
+
+## Engineering evidence at a glance
+
+- Hand-written C++ retrieval core rather than a hosted vector-database dependency.
+- SIMD/OpenMP-oriented CPU search path and approximate-nearest-neighbour graph implementation.
+- Local-first RAG/agent architecture with evidence surfaced to the user.
+- Multimodal tooling while keeping the core stack usable without PyTorch.
+- CI and security automation are part of the repository rather than external claims.
+
+## Why it belongs in this portfolio
+
+Cognivore is not an energy-domain project. Its value is different: it demonstrates that the same engineer who understands OT/SCADA and predictive maintenance can also design lower-level AI infrastructure and retrieval systems. For an Industrial AI hiring review it should therefore sit **after** Ironpulse, ARGUS-NEURO and SCADA Generator, not replace them as the primary story.
+
+---
+
 **Explainable, local-first AI over your own documents.** Every answer
 comes with its evidence: a live **knowledge map** shows exactly which
 passages it was drawn from, every **sentence is checked** against those
