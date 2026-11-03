@@ -37,6 +37,19 @@ class ToolRegistry:
     def get(self, name: str) -> Tool | None:
         return self._tools.get(name)
 
+    def invoke(self, name: str, arguments: dict[str, Any], *, user_input: str = "") -> str:
+        tool = self.get(name)
+        if tool is None:
+            available = ", ".join(self.names())
+            return f"Error: unknown tool '{name}'. Available tools: {available}"
+        try:
+            # Pass the original question separately for tools such as RAG search.
+            # Model-provided arguments cannot replace this context.
+            call_kwargs = {**arguments, "_user_input": user_input}
+            return tool.run(**call_kwargs)
+        except Exception as exc:
+            return f"Error running tool '{name}': {exc}"
+
     def names(self) -> list[str]:
         return list(self._tools.keys())
 
