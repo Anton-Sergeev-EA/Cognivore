@@ -1,17 +1,23 @@
 """The tool interface and a simple registry.
 
-A ``Tool`` is anything the agent can call by name with a single JSON-object
-argument and get back a string observation. Tools declare a JSON-schema-ish
-``parameters`` dict purely for documentation/prompting purposes -- we don't
-do full JSON Schema validation here to keep things dependency-light, but the
-shape follows the JSON Schema conventions models are trained on so it slots
-into function-calling APIs unchanged if a backend supports those natively.
+A tool accepts a JSON object and returns a text observation. The registry
+checks required fields and supported primitive types before invoking the tool.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar
+
+_JSON_TYPES = {
+    "string": (str,),
+    "integer": (int,),
+    "number": (int, float),
+    "boolean": (bool,),
+    "object": (dict,),
+    "array": (list,),
+    "null": (type(None),),
+}
 
 
 class Tool(ABC):
@@ -46,6 +52,14 @@ class ToolRegistry:
             # Pass the original question separately for tools such as RAG search.
             # Model-provided arguments cannot replace this context.
             call_kwargs = {**arguments, "_user_input": user_input}
+            for field in tool.parameters.get("required", []):
+                if field not in arguments:
+                    return f"Error running tool '{name}': missing required argument '{field}'."
+            for field, schema in tool.parameters.get("properties", {}).items():
+                expected = schema.get("type")
+                accepted = _JSON_TYPES.get(expected) if isinstance(expected, str) else None
+                if field in arguments and accepted and type(arguments[field]) not in accepted:
+                    return f"Error running tool '{name}': argument '{field}' must be {expected}."
             return tool.run(**call_kwargs)
         except Exception as exc:
             return f"Error running tool '{name}': {exc}"

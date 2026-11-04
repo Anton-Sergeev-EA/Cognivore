@@ -34,7 +34,7 @@ class RagSearchTool(Tool):
             "query": {"type": "string"},
             "top_k": {"type": "integer", "default": 3},
         },
-        "required": ["query"],
+        "required": [],
     }
 
     def __init__(self, store: DocumentStore, min_confidence: float = 0.0) -> None:
