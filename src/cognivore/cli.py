@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from difflib import unified_diff
 from pathlib import Path
 
 import typer
@@ -11,6 +12,7 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 
+from cognivore.agent.runs import RunStore
 from cognivore.bootstrap import (
     build_agent,
     load_or_build_document_store,
@@ -134,6 +136,44 @@ def bench(
     run_benchmark(n=n, dim=dim, queries=queries, console=console)
     if scaling:
         run_scaling_benchmark(dim=dim, console=console)
+
+
+def _comparison_store() -> RunStore:
+    settings = get_settings()
+    settings.ensure_data_dir()
+    return RunStore(settings.data_dir / "runs.sqlite3")
+
+
+@app.command()
+def compare(before: Path, after: Path) -> None:
+    """Stage a report with changed lines and source line ranges."""
+    old_lines = before.read_text(encoding="utf-8").splitlines()
+    new_lines = after.read_text(encoding="utf-8").splitlines()
+    changes = "\n".join(
+        unified_diff(old_lines, new_lines, fromfile=before.name, tofile=after.name, lineterm="")
+    )
+    report = "# Specification changes\n\n"
+    report += (
+        "\n".join(f"    {line}" for line in changes.splitlines()) if changes else "No changes."
+    )
+    report += "\n"
+    run = _comparison_store().create(report)
+    typer.echo(report)
+    typer.echo(f"Pending approval: {run.run_id}")
+
+
+@app.command()
+def comparison_status(run_id: str) -> None:
+    """Show the saved report and its approval status."""
+    run = _comparison_store().get(run_id)
+    typer.echo(run.report)
+    typer.echo(f"{run.status}: {run.run_id}")
+
+
+@app.command()
+def approve_comparison(run_id: str) -> None:
+    """Approve a staged comparison and publish its report."""
+    typer.echo(str(_comparison_store().approve(run_id)))
 
 
 def main() -> None:
