@@ -1,5 +1,7 @@
 # Cognivore
 
+**Lokale Agenten-Laufzeit für Dokumente mit erklärbarem RAG, C++-Vektorsuche und Freigabe vor der Veröffentlichung von Vergleichsberichten.**
+
 **Ein lokal-first, torch-freies multimodales Agenten-Framework.** LLM-Reasoning
 + RAG, mit einem handgeschriebenen C++-Vektorindex und einer Web-Chat-UI --
 alles läuft auf einem reinen CPU-Laptop, nichts muss Ihren Rechner verlassen.
@@ -426,3 +428,13 @@ MIT -- siehe [LICENSE](../../LICENSE).
 
 Entwickelt von **Sergeev Anton** ([GitHub](https://github.com/Anton-Sergeev-EA), [avsergeev1981@gmail.com](mailto:avsergeev1981@gmail.com)).
 Beiträge sind willkommen -- siehe [CONTRIBUTING.md](../../CONTRIBUTING.md).
+
+## Dokumentversionen vergleichen
+
+Vergleichen Sie zwei UTF-8-Dateien Zeile für Zeile. Die CLI zeigt die Zeilenbereiche der Quellen und speichert den Entwurf samt Freigabestatus in SQLite. Mit der angezeigten ID lässt sich der Entwurf nach einem Neustart wieder öffnen. Der Bericht wird erst nach ausdrücklicher Freigabe im Unterordner `reports/` des Datenverzeichnisses gespeichert.
+
+```bash
+cognivore compare v1.md v2.md
+cognivore comparison-status RUN_ID
+cognivore approve-comparison RUN_ID
+```

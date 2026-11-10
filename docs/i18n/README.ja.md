@@ -1,5 +1,7 @@
 # Cognivore
 
+**説明可能な RAG、C++ のベクトル検索、比較レポートの公開前承認を備えた、文書向けのローカルエージェント実行基盤です。**
+
 **ローカルファーストで PyTorch 不要なマルチモーダル・エージェントフレームワーク。**
 LLM による推論 + RAG を、自作の C++ ベクトルインデックスと Web チャット UI とともに
 提供 —— すべてが CPU のみのノート PC 上で動作し、外部への通信は一切不要です。
@@ -400,3 +402,13 @@ MIT ライセンス —— 詳細は [LICENSE](../../LICENSE) を参照してく
 
 **Sergeev Anton** によって開発されました([GitHub](https://github.com/Anton-Sergeev-EA)、[avsergeev1981@gmail.com](mailto:avsergeev1981@gmail.com))。
 コントリビューション歓迎 —— 詳細は [CONTRIBUTING.md](../../CONTRIBUTING.md) を参照してください。
+
+## 文書のバージョンを比較する
+
+UTF-8 ファイルを 2 つ指定して行単位で比較します。CLI は元ファイルの行範囲を表示し、下書きと承認状態を SQLite に保存します。再起動後は表示された ID で下書きを再表示できます。明示的に承認すると、レポートがデータディレクトリの `reports/` サブディレクトリに保存されます。
+
+```bash
+cognivore compare v1.md v2.md
+cognivore comparison-status RUN_ID
+cognivore approve-comparison RUN_ID
+```

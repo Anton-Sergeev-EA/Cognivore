@@ -1,5 +1,7 @@
 # Cognivore
 
+**Entorno de ejecución local para agentes que trabajan con documentos, con RAG explicable, búsqueda vectorial en C++ y aprobación antes de publicar informes comparativos.**
+
 **Un framework de agentes multimodal local-first y sin PyTorch.** Razonamiento
 LLM + RAG, con un índice vectorial escrito a mano en C++ y una interfaz de
 chat web -- todo funciona en un portátil solo con CPU, nada tiene que salir
@@ -424,3 +426,13 @@ MIT – consulta [LICENSE](../../LICENSE).
 ## Contacto
 
 Creado por **Sergeev Anton** ([GitHub](https://github.com/Anton-Sergeev-EA), [avsergeev1981@gmail.com](mailto:avsergeev1981@gmail.com)). Las contribuciones son bienvenidas – consulta [CONTRIBUTING.md](../../CONTRIBUTING.md).
+
+## Comparar versiones de documentos
+
+Compara dos archivos UTF-8 línea por línea. La CLI muestra los rangos de líneas de los archivos originales y guarda el borrador y su estado de aprobación en SQLite. Usa el ID mostrado para volver a abrir el borrador tras reiniciar. El informe se guarda en la subcarpeta `reports/` del directorio de datos tras la aprobación explícita.
+
+```bash
+cognivore compare v1.md v2.md
+cognivore comparison-status RUN_ID
+cognivore approve-comparison RUN_ID
+```

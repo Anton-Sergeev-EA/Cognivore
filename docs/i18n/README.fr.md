@@ -1,5 +1,7 @@
 # Cognivore
 
+**Environnement d’exécution local pour agents documentaires, avec RAG explicable, recherche vectorielle en C++ et validation avant publication des rapports de comparaison.**
+
 **Un framework d'agent multimodal local-first, sans PyTorch.** Raisonnement
 LLM + RAG, avec un index vectoriel écrit en C++ et une interface de chat
 web -- tout fonctionne sur un simple ordinateur portable équipé d'un CPU,
@@ -433,3 +435,13 @@ MIT – voir [LICENSE](../../LICENSE).
 ## Contact
 
 Créé par **Sergeev Anton** ([GitHub](https://github.com/Anton-Sergeev-EA), [avsergeev1981@gmail.com](mailto:avsergeev1981@gmail.com)). Les contributions sont les bienvenues – voir [CONTRIBUTING.md](../../CONTRIBUTING.md).
+
+## Comparer des versions de documents
+
+Comparez deux fichiers UTF-8 ligne par ligne. La CLI affiche les plages de lignes des sources et conserve le brouillon et son statut de validation dans SQLite. Après un redémarrage, rouvrez le brouillon avec l’identifiant affiché. Le rapport est enregistré dans le sous-dossier `reports/` du répertoire de données après validation explicite.
+
+```bash
+cognivore compare v1.md v2.md
+cognivore comparison-status RUN_ID
+cognivore approve-comparison RUN_ID
+```

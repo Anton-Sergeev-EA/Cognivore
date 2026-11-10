@@ -1,6 +1,6 @@
 # Cognivore
 
-**Local-first, explainable RAG/agent system with a hand-written C++ vector-search core, CPU-oriented retrieval, evidence mapping, and source-grounded answer verification.**
+**Local-first agent harness for documents, with explainable RAG, C++ vector search, and approval before publishing comparison reports.**
 
 > **Portfolio signal:** systems-oriented AI engineering beyond industrial OT — C++ performance work, retrieval architecture, Python orchestration, testing, and local deployment.
 
@@ -489,3 +489,13 @@ MIT -- see [LICENSE](LICENSE).
 
 Built by **Sergeev Anton** ([GitHub](https://github.com/Anton-Sergeev-EA), [avsergeev1981@gmail.com](mailto:avsergeev1981@gmail.com)).
 Contributions welcome -- see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Compare document versions
+
+Compare two UTF-8 files line by line. The CLI shows source line ranges and saves the draft and its approval status in SQLite. Use the displayed run ID to reopen the draft after a restart. Only explicit approval publishes the report to the data directory’s `reports/` subdirectory.
+
+```bash
+cognivore compare v1.md v2.md
+cognivore comparison-status RUN_ID
+cognivore approve-comparison RUN_ID
+```

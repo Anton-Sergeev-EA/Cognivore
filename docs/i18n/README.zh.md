@@ -1,5 +1,7 @@
 # Cognivore
 
+**面向文档的本地智能体运行框架，提供可解释的 RAG、C++ 向量搜索，以及对比报告发布前的审批流程。**
+
 **面向您自有文档的可解释本地 AI。** 每个答案都附带证据：实时的**知识地图**
 显示答案取自哪些片段，**每一句话都会**对照这些来源进行核查，而文档无法回答的
 问题会进入**知识缺口雷达**。其底层是一个无需 PyTorch 的多模态智能体框架——
@@ -416,3 +418,13 @@ MIT 许可证 —— 详见 [LICENSE](../../LICENSE)。
 
 由 **Sergeev Anton** 开发（[GitHub](https://github.com/Anton-Sergeev-EA)，[avsergeev1981@gmail.com](mailto:avsergeev1981@gmail.com)）。
 欢迎贡献 —— 详见 [CONTRIBUTING.md](../../CONTRIBUTING.md)。
+
+## 比较文档版本
+
+逐行比较两个 UTF-8 文件。命令行会显示源文件中的行号范围，并将草稿与审批状态保存到 SQLite。重启后可用显示的 ID 重新打开草稿。明确批准后，报告才会写入数据目录下的 `reports/` 子目录。
+
+```bash
+cognivore compare v1.md v2.md
+cognivore comparison-status RUN_ID
+cognivore approve-comparison RUN_ID
+```
