@@ -52,6 +52,14 @@ class AgentResult:
     hit_step_limit: bool = False
 
 
+@dataclass
+class AgentCheckpoint:
+    messages: list[ChatMessage]
+    trace: list[TraceEntry]
+    remaining_steps: int
+    direct_answer: str | None = None
+
+
 class Agent:
     def __init__(
         self,
@@ -182,13 +190,26 @@ class Agent:
         messages.append(ChatMessage(role="user", content=user_input))
         return messages, pre_trace, direct_answer
 
-    def run(self, user_input: str) -> AgentResult:
-        messages, trace, direct_answer = self._prepare(user_input)
+    def run(
+        self,
+        user_input: str,
+        *,
+        checkpoint: AgentCheckpoint | None = None,
+        save: Callable[[AgentCheckpoint], None] | None = None,
+    ) -> AgentResult:
+        if checkpoint is None:
+            messages, trace, direct_answer = self._prepare(user_input)
+            checkpoint = AgentCheckpoint(messages, trace, self.max_steps, direct_answer)
+            if save is not None:
+                save(checkpoint)
+        messages = list(checkpoint.messages)
+        trace = list(checkpoint.trace)
+        direct_answer = checkpoint.direct_answer
         if direct_answer is not None:
             trace.append(TraceEntry("Answered without the model.", None, {}, None))
             self._remember_turn(user_input, direct_answer)
             return AgentResult(answer=direct_answer, trace=trace)
-        for _step_num in range(self.max_steps):
+        for remaining in range(checkpoint.remaining_steps, 0, -1):
             completion = self.llm.generate(messages, self.generation_config)
             step: AgentStep = parse_step(completion)
 
@@ -202,6 +223,8 @@ class Agent:
             trace.append(TraceEntry(step.thought, step.action, step.action_input, observation))
             messages.append(ChatMessage(role="assistant", content=completion))
             messages.append(self._observation_message(observation))
+            if save is not None:
+                save(AgentCheckpoint(messages, trace, remaining - 1))
 
         # Step budget exhausted: ask once more for a best-effort final answer.
         messages.append(

@@ -1,4 +1,4 @@
-"""Persistent state for document comparison runs."""
+"""Persistent agent checkpoints and staged reports."""
 
 from __future__ import annotations
 
@@ -8,6 +8,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import UUID, uuid4
+
+from pydantic import TypeAdapter
+
+from cognivore.agent.core import Agent, AgentCheckpoint
+
+_CHECKPOINT = TypeAdapter(AgentCheckpoint)
 
 
 @dataclass(frozen=True)
@@ -28,6 +34,61 @@ class RunStore:
                     status TEXT NOT NULL
                 )
             """)
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS agent_tasks (
+                    id TEXT PRIMARY KEY,
+                    prompt TEXT NOT NULL,
+                    checkpoint BLOB,
+                    revision INTEGER NOT NULL DEFAULT 0
+                )
+            """)
+
+    def create_task(self, prompt: str) -> str:
+        run_id = uuid4().hex
+        with closing(sqlite3.connect(self.path)) as db, db:
+            db.execute("INSERT INTO agent_tasks (id, prompt) VALUES (?, ?)", (run_id, prompt))
+        return run_id
+
+    def resume_task(self, run_id: str, agent: Agent) -> ComparisonRun:
+        with closing(sqlite3.connect(self.path)) as db:
+            row = db.execute(
+                "SELECT task.prompt, task.checkpoint, task.revision, report.report, report.status "
+                "FROM agent_tasks AS task LEFT JOIN comparison_runs AS report ON task.id = report.id "
+                "WHERE task.id = ?",
+                (run_id,),
+            ).fetchone()
+        if row is None:
+            raise ValueError(f"Unknown agent run: {run_id}")
+        prompt, payload, revision, report, status = row
+        if status is not None:
+            return ComparisonRun(run_id, report, status)
+
+        def save(state: AgentCheckpoint) -> None:
+            nonlocal revision
+            with closing(sqlite3.connect(self.path)) as db, db:
+                updated = db.execute(
+                    "UPDATE agent_tasks SET checkpoint = ?, revision = revision + 1 "
+                    "WHERE id = ? AND revision = ?",
+                    (_CHECKPOINT.dump_json(state), run_id, revision),
+                )
+                if updated.rowcount != 1:
+                    raise RuntimeError("Another process advanced this run. Reopen it to continue.")
+            revision += 1
+
+        checkpoint = _CHECKPOINT.validate_json(payload) if payload is not None else None
+        result = agent.run(prompt, checkpoint=checkpoint, save=save)
+        with closing(sqlite3.connect(self.path)) as db, db:
+            updated = db.execute(
+                "UPDATE agent_tasks SET revision = revision + 1 WHERE id = ? AND revision = ?",
+                (run_id, revision),
+            )
+            if updated.rowcount != 1:
+                raise RuntimeError("Another process advanced this run. Reopen it to continue.")
+            db.execute(
+                "INSERT INTO comparison_runs (id, report, status) VALUES (?, ?, ?)",
+                (run_id, result.answer, "pending"),
+            )
+        return ComparisonRun(run_id, result.answer, "pending")
 
     def create(self, report: str) -> ComparisonRun:
         run = ComparisonRun(uuid4().hex, report, "pending")

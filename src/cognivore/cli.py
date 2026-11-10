@@ -138,7 +138,7 @@ def bench(
         run_scaling_benchmark(dim=dim, console=console)
 
 
-def _comparison_store() -> RunStore:
+def _run_store() -> RunStore:
     settings = get_settings()
     settings.ensure_data_dir()
     return RunStore(settings.data_dir / "runs.sqlite3")
@@ -157,7 +157,7 @@ def compare(before: Path, after: Path) -> None:
         "\n".join(f"    {line}" for line in changes.splitlines()) if changes else "No changes."
     )
     report += "\n"
-    run = _comparison_store().create(report)
+    run = _run_store().create(report)
     typer.echo(report)
     typer.echo(f"Pending approval: {run.run_id}")
 
@@ -165,7 +165,7 @@ def compare(before: Path, after: Path) -> None:
 @app.command()
 def comparison_status(run_id: str) -> None:
     """Show the saved report and its approval status."""
-    run = _comparison_store().get(run_id)
+    run = _run_store().get(run_id)
     typer.echo(run.report)
     typer.echo(f"{run.status}: {run.run_id}")
 
@@ -173,7 +173,36 @@ def comparison_status(run_id: str) -> None:
 @app.command()
 def approve_comparison(run_id: str) -> None:
     """Approve a staged comparison and publish its report."""
-    typer.echo(str(_comparison_store().approve(run_id)))
+    typer.echo(str(_run_store().approve(run_id)))
+
+
+@app.command()
+def run_task(prompt: str) -> None:
+    """Start a resumable agent task using calculator and knowledge-base tools."""
+    run_id = _run_store().create_task(prompt)
+    typer.echo(f"Run ID: {run_id}")
+    resume_task(run_id)
+
+
+@app.command()
+def resume_task(run_id: str) -> None:
+    """Resume an interrupted task or display its staged report."""
+    settings = get_settings()
+    agent = build_agent(
+        settings,
+        store=load_or_build_document_store(settings),
+        include_media=False,
+        use_vector_memory=False,
+    )
+    run = _run_store().resume_task(run_id, agent)
+    typer.echo(run.report)
+    typer.echo(f"{run.status}: {run.run_id}")
+
+
+@app.command()
+def publish_task(run_id: str) -> None:
+    """Approve publication of a staged report."""
+    typer.echo(str(_run_store().approve(run_id)))
 
 
 def main() -> None:
