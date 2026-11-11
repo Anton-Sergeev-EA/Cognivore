@@ -1,0 +1,176 @@
+"""Browser specification review API and SQLite persistence."""
+
+from __future__ import annotations
+
+import sqlite3
+from collections.abc import Iterator
+from contextlib import closing, contextmanager
+from pathlib import Path
+from typing import Literal
+from uuid import UUID, uuid4
+
+from fastapi import APIRouter, HTTPException, UploadFile
+from pydantic import BaseModel
+from starlette.responses import PlainTextResponse
+
+from cognivore.rag.embeddings import EmbeddingModel
+from cognivore.review import MAX_DOCUMENT_BYTES, Finding, compare_requirements
+
+Decision = Literal["accepted", "rejected", "pending"]
+
+
+class DecisionInput(BaseModel):
+    decision: Decision
+
+
+class Review(BaseModel):
+    id: UUID
+    before_name: str
+    after_name: str
+    findings: list[Finding]
+    decisions: list[Decision]
+    published: bool = False
+
+    def report(self) -> str:
+        lines = [
+            "# Specification review",
+            "",
+            f"    {self.before_name} → {self.after_name}",
+            "",
+        ]
+        for finding, decision in zip(self.findings, self.decisions, strict=True):
+            if decision != "accepted":
+                continue
+            lines.extend([f"## {finding.kind.title()}", ""])
+            if finding.signals:
+                lines.extend([", ".join(finding.signals), ""])
+            for side, citation in (("Before", finding.before), ("After", finding.after)):
+                if citation:
+                    lines.extend(
+                        [
+                            f"    {side} | {citation.source}:{citation.line}",
+                            f"    {citation.text}",
+                            "",
+                        ]
+                    )
+        if "accepted" not in self.decisions:
+            lines.extend(["No findings accepted.", ""])
+        return "\n".join(lines)
+
+
+class ReviewStore:
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        with self.connection() as db:
+            db.execute(
+                "CREATE TABLE IF NOT EXISTS specification_reviews ("
+                "id TEXT PRIMARY KEY, state TEXT NOT NULL, report TEXT)"
+            )
+
+    @contextmanager
+    def connection(self, *, write: bool = False) -> Iterator[sqlite3.Connection]:
+        with closing(sqlite3.connect(self.path)) as db, db:
+            if write:
+                db.execute("BEGIN IMMEDIATE")
+            yield db
+
+    def create(self, review: Review) -> None:
+        with self.connection(write=True) as db:
+            db.execute(
+                "INSERT INTO specification_reviews (id, state) VALUES (?, ?)",
+                (review.id.hex, review.model_dump_json()),
+            )
+
+    def load(self, db: sqlite3.Connection, review_id: UUID) -> tuple[Review, str | None]:
+        row = db.execute(
+            "SELECT state, report FROM specification_reviews WHERE id = ?", (review_id.hex,)
+        ).fetchone()
+        if row is None:
+            raise HTTPException(404, "Review not found.")
+        return Review.model_validate_json(row[0]), row[1]
+
+
+def _read(file: UploadFile) -> tuple[str, str]:
+    name = Path((file.filename or "document").replace("\\", "/")).name
+    name = " ".join(name.split())[:160] or "document"
+    data = file.file.read(MAX_DOCUMENT_BYTES + 1)
+    if len(data) > MAX_DOCUMENT_BYTES:
+        raise HTTPException(413, "Each document must be at most 128 KiB.")
+    try:
+        return name, data.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(422, "Upload a UTF-8 text or Markdown file.") from exc
+
+
+def review_router(path: Path, embedder: EmbeddingModel) -> APIRouter:
+    router = APIRouter(prefix="/api/reviews")
+    store = ReviewStore(path)
+
+    @router.post("", status_code=201)
+    def create(before: UploadFile, after: UploadFile) -> Review:
+        before_name, before_text = _read(before)
+        after_name, after_text = _read(after)
+        try:
+            findings = compare_requirements(
+                before_name, before_text, after_name, after_text, embedder
+            )
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        review = Review(
+            id=uuid4(),
+            before_name=before_name,
+            after_name=after_name,
+            findings=findings,
+            decisions=["pending"] * len(findings),
+        )
+        store.create(review)
+        return review
+
+    @router.get("/{review_id}")
+    def get(review_id: UUID) -> Review:
+        with store.connection() as db:
+            review, _ = store.load(db, review_id)
+        return review
+
+    @router.put("/{review_id}/findings/{index}")
+    def decide(review_id: UUID, index: int, choice: DecisionInput) -> Review:
+        with store.connection(write=True) as db:
+            review, _ = store.load(db, review_id)
+            if review.published:
+                raise HTTPException(409, "This review has already been published.")
+            if not 0 <= index < len(review.decisions):
+                raise HTTPException(404, "Finding not found.")
+            review.decisions[index] = choice.decision
+            db.execute(
+                "UPDATE specification_reviews SET state = ? WHERE id = ?",
+                (review.model_dump_json(), review.id.hex),
+            )
+        return review
+
+    @router.post("/{review_id}/publish")
+    def publish(review_id: UUID) -> Review:
+        with store.connection(write=True) as db:
+            review, existing_report = store.load(db, review_id)
+            if existing_report is not None:
+                return review
+            if "pending" in review.decisions:
+                raise HTTPException(409, "Decide all findings before publishing.")
+            review.published = True
+            db.execute(
+                "UPDATE specification_reviews SET state = ?, report = ? WHERE id = ?",
+                (review.model_dump_json(), review.report(), review.id.hex),
+            )
+        return review
+
+    @router.get("/{review_id}/report")
+    def download(review_id: UUID) -> PlainTextResponse:
+        with store.connection() as db:
+            _, report = store.load(db, review_id)
+        if report is None:
+            raise HTTPException(409, "Publish the review before downloading the report.")
+        return PlainTextResponse(
+            report,
+            headers={"Content-Disposition": f'attachment; filename="review-{review_id.hex}.md"'},
+        )
+
+    return router

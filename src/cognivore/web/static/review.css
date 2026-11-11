@@ -1,0 +1,18 @@
+:root { color-scheme: light dark; font: 1rem/1.55 system-ui, sans-serif; }
+body { margin: 0; background: Canvas; color: CanvasText; }
+main { max-width: 62rem; margin: auto; padding: 1.5rem; }
+h1, h2, h3 { line-height: 1.2; overflow-wrap: anywhere; }
+form, footer { display: flex; flex-wrap: wrap; align-items: end; gap: .8rem; }
+label { display: grid; gap: .3rem; font-weight: 600; }
+input, button { font: inherit; }
+button { cursor: pointer; padding: .35rem .65rem; }
+button:disabled { cursor: default; }
+button[aria-pressed="true"] { outline: 2px solid LinkText; }
+article { border-top: 1px solid GrayText; padding-block: .7rem 1rem; }
+.sources { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; }
+.sources section { border: 1px solid GrayText; border-radius: .4rem; padding: .75rem; }
+.sources h4, blockquote { margin: 0; overflow-wrap: anywhere; }
+blockquote { white-space: pre-wrap; }
+.choices { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: .75rem; }
+footer { padding-top: 1rem; }
+@media (max-width: 40rem) { .sources { grid-template-columns: 1fr; } }

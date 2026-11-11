@@ -34,6 +34,7 @@ from cognivore.media.video import VideoAnalysis, analyze_video, timeline_passage
 from cognivore.ml import KnowledgeGapTracker, KnowledgeMapBuilder, TurnInsight, build_turn_insight
 from cognivore.ml.insight import SEARCH_TOOL
 from cognivore.rag.store import DocumentStore, embedder_id
+from cognivore.web.reviews import review_router
 from cognivore.web.schemas import (
     ChatRequest,
     ChatResponse,
@@ -164,6 +165,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="Cognivore", version=__version__)
 
     store = _load_or_build_store(settings)
+    app.include_router(review_router(settings.data_dir / "runs.sqlite3", store.embedder))
     agent = build_agent(settings, store=store, include_media=True)
     map_builder = KnowledgeMapBuilder(store, max_points=settings.map_max_points)
     gap_tracker = KnowledgeGapTracker(

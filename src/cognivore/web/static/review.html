@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Review specifications · Cognivore</title>
+  <link rel="stylesheet" href="/review.css">
+  <script type="module" src="/review.js"></script>
+</head>
+<body>
+  <main>
+    <a href="/">← Cognivore chat</a>
+    <h1>Review specifications</h1>
+    <p>Compare two UTF-8 text or Markdown files. Put each requirement on its own line.</p>
+    <form id="upload">
+      <label>Earlier revision <input name="before" type="file" accept=".txt,.md,.markdown" required></label>
+      <label>Later revision <input name="after" type="file" accept=".txt,.md,.markdown" required></label>
+      <button>Compare files</button>
+      <button id="demo" type="button">Try the English demo</button>
+    </form>
+    <p id="status" role="status" aria-live="polite"></p>
+    <section id="review" aria-labelledby="title" hidden>
+      <h2 id="title"></h2>
+      <p>Bookmark this page to resume your review later. Accept findings to include them in the report.</p>
+      <div id="findings"></div>
+      <footer>
+        <button id="publish" type="button">Confirm and publish report</button>
+        <a id="download" hidden>Download report</a>
+      </footer>
+    </section>
+  </main>
+</body>
+</html>
