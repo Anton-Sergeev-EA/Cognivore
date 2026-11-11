@@ -499,3 +499,30 @@ cognivore compare v1.md v2.md
 cognivore comparison-status RUN_ID
 cognivore approve-comparison RUN_ID
 ```
+
+## Review specifications in the browser
+
+Start `cognivore serve` and open **Review specifications** in the sidebar.
+Upload two UTF-8 text or Markdown files with one requirement per line. The
+review shows source lines side by side and highlights possible changes in
+numbers, units, obligations and conditions. Check ambiguous matches against
+both quotes. Accept or reject the findings, then confirm publication and
+download the Markdown report. Bookmark the review URL to reopen saved
+decisions after a restart. The local SQLite database stores the findings,
+their source quotes, the decisions and the published report.
+
+Select **Try the English demo** to compare two telemetry gateway
+specifications. With the offline hashing embedder, the annotated example
+returns five findings: three changed requirements, one addition and one
+removal. Two unchanged requirements were moved. The regression test also
+checks that equally plausible matches are flagged as ambiguous.
+
+```bash
+pytest tests/test_review.py tests/test_review_web.py
+```
+
+The review supports up to 128 KiB and 250 non-heading lines per version.
+Requirement IDs help align rewritten text. Similarity is heuristic, so
+verify the cited lines before relying on a finding. The English demo and
+German and Russian signal tests cover specific cases. They do not measure
+accuracy on arbitrary documents.

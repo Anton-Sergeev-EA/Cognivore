@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from typing import Literal
 
 import numpy as np
@@ -18,15 +18,20 @@ MAX_LINES = 250
 _ID = re.compile(r"^\s*(?:[-*]\s+)?\[?([A-Z][A-Z0-9]*-\d+)\]?[:.\s]")
 _NUMBER = re.compile(
     r"(?<!\w)[+-]?\d+(?:[.,]\d+)?(?:\s*(?:%|ms|s|sec(?:onds?)?|min(?:utes?)?|"
-    r"h(?:ours?)?|days?|v|kv|kw|w|mb|gb)(?!\w))?",
+    r"h(?:ours?)?|days?|minuten?|sekunden?|tage[n]?|мин(?:ут[уы]?)?|сек(?:унд[уы]?)?|дн(?:ей|я)|"
+    r"v|kv|kw|w|mb|gb)(?!\w))?",
     re.IGNORECASE,
 )
 _MODAL = re.compile(
-    r"\b(?:must not|shall not|may not|should not|must|shall|may|should|required|optional)\b",
+    r"\b(?:must not|shall not|may not|should not|must|shall|may|should|required|optional|"
+    r"darf nicht|soll nicht|muss|müssen|darf|soll|"
+    r"не должен|не должна|не допускается|должен|должна|должно|может|обязательно)\b",
     re.IGNORECASE,
 )
 _CONDITION = re.compile(
-    r"\b(?:unless|except(?: when| if)?|only if|when|if|provided that|during|after|before)\b.*",
+    r"\b(?:unless|except(?: when| if)?|only if|when|if|provided that|during|after|before|"
+    r"nur wenn|wenn|falls|sofern|außer|während|nach|vor|"
+    r"только если|если|когда|кроме|при условии|после|перед)\b.*",
     re.IGNORECASE,
 )
 _ALIASES = {
@@ -118,10 +123,16 @@ def compare_requirements(
         if exact is not None:
             paired[i] = exact
             unmatched.remove(exact)
+    before_ids = Counter(map(_requirement_id, before))
     for i, citation in enumerate(before):
         identifier = _requirement_id(citation)
         candidates = by_id.get(identifier, []) if identifier else []
-        if i not in paired and len(candidates) == 1 and candidates[0] in unmatched:
+        if (
+            i not in paired
+            and before_ids[identifier] == 1
+            and len(candidates) == 1
+            and candidates[0] in unmatched
+        ):
             paired[i] = candidates[0]
             unmatched.remove(candidates[0])
 
