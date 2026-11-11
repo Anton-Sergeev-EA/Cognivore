@@ -9,7 +9,7 @@ from typing import Literal
 import numpy as np
 from pydantic import BaseModel
 
-from cognivore.rag.embeddings import EmbeddingModel
+from cognivore.rag.embeddings import EmbeddingModel, HashingEmbedder
 from cognivore.rag.tokenize import tokenize
 
 MAX_DOCUMENT_BYTES = 128 * 1024
@@ -50,6 +50,7 @@ class Citation(BaseModel):
     source: str
     line: int
     text: str
+    section: str = ""
 
 
 class Finding(BaseModel):
@@ -63,11 +64,14 @@ class Finding(BaseModel):
 def _citations(source: str, text: str) -> list[Citation]:
     if len(text.encode("utf-8")) > MAX_DOCUMENT_BYTES:
         raise ValueError("Each document must be at most 128 KiB.")
-    citations = [
-        Citation(source=source, line=line, text=value)
-        for line, value in enumerate(text.splitlines(), 1)
-        if value.strip() and not value.lstrip().startswith("#")
-    ]
+    citations = []
+    section = ""
+    for line, value in enumerate(text.splitlines(), 1):
+        stripped = value.strip()
+        if stripped.startswith("#"):
+            section = stripped.strip("# ").strip()
+        elif stripped:
+            citations.append(Citation(source=source, line=line, text=value, section=section))
     if len(citations) > MAX_LINES:
         raise ValueError(f"Each document must have at most {MAX_LINES} non-heading lines.")
     return citations
@@ -100,12 +104,21 @@ def _signals(before: str, after: str) -> list[str]:
     ] or ["wording"]
 
 
+def _similarities(embedder: EmbeddingModel, texts: list[str], split: int) -> np.ndarray:
+    vectors = np.asarray(embedder.embed(texts), dtype=np.float32)
+    norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+    vectors /= np.maximum(norms, 1e-8)
+    return vectors[:split] @ vectors[split:].T
+
+
 def compare_requirements(
     before_name: str,
     before_text: str,
     after_name: str,
     after_text: str,
     embedder: EmbeddingModel,
+    *,
+    use_section_context: bool = True,
 ) -> list[Finding]:
     before = _citations(before_name, before_text)
     after = _citations(after_name, after_text)
@@ -141,12 +154,21 @@ def compare_requirements(
     right = sorted(unmatched)
     uncertain: dict[int, list[int]] = {}
     if left and right:
-        texts = [_matching_text(before[i]) for i in left]
-        texts.extend(_matching_text(after[j]) for j in right)
-        vectors = np.asarray(embedder.embed(texts), dtype=np.float32)
-        norms = np.linalg.norm(vectors, axis=1, keepdims=True)
-        vectors /= np.maximum(norms, 1e-8)
-        semantic = vectors[: len(left)] @ vectors[len(left) :].T
+        passages = [before[i] for i in left] + [after[j] for j in right]
+        texts = [_matching_text(citation) for citation in passages]
+        semantic = _similarities(embedder, texts, len(left))
+        contextual = None
+        if (
+            use_section_context
+            and not isinstance(embedder, HashingEmbedder)
+            and any(before[i].section for i in left)
+            and any(after[j].section for j in right)
+        ):
+            context_texts = [
+                f"{citation.section}\n{text}" if citation.section else text
+                for citation, text in zip(passages, texts, strict=True)
+            ]
+            contextual = _similarities(embedder, context_texts, len(left))
         terms = [_terms(value) for value in texts]
         scores = np.zeros_like(semantic)
         renumbered: set[tuple[int, int]] = set()
@@ -161,7 +183,18 @@ def compare_requirements(
                         renumbered.add((x, y))
                     continue
                 overlap = len(first & second) / max(1, len(first | second))
-                scores[x, y] = 0.55 * overlap + 0.45 * max(0, semantic[x, y])
+                similarity = max(0, semantic[x, y])
+                score = 0.55 * overlap + 0.45 * similarity
+                if (
+                    contextual is not None
+                    and before[i].section
+                    and after[j].section
+                    and similarity >= 0.55
+                    and contextual[x, y] >= 0.70
+                ):
+                    # Shared section wording alone cannot promote a match.
+                    score = max(score, 0.25 * overlap + 0.45 * similarity + 0.30 * contextual[x, y])
+                scores[x, y] = score
         for x, i in enumerate(left):
             ranked = np.argsort(-scores[x], kind="stable")
             y = int(ranked[0])

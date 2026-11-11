@@ -70,3 +70,35 @@ def test_renumbered_requirement_is_flagged_without_asserting_a_match() -> None:
         HashingEmbedder(),
     )
     assert [item.kind for item in findings] == ["ambiguous"]
+
+
+class SectionEmbedder:
+    id = "section-test"
+    dim = 2
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        vectors = {
+            "Retain logs.": [1.0, 0.0],
+            "Archive records.": [0.6, 0.8],
+            "Calibrate sensors.": [0.0, 1.0],
+        }
+        return [[1.0, 0.0] if "\n" in text else vectors[text] for text in texts]
+
+
+def test_section_context_requires_similarity_in_the_requirement_itself() -> None:
+    before = "# Operational history\nRetain logs."
+    after = "# Auditing\nArchive records."
+    model = SectionEmbedder()
+    baseline = compare_requirements("v1", before, "v2", after, model, use_section_context=False)
+    assert [item.kind for item in baseline] == ["ambiguous"]
+
+    contextual = compare_requirements("v1", before, "v2", after, model)
+    assert [item.kind for item in contextual] == ["changed"]
+    assert contextual[0].before is not None
+    assert contextual[0].before.section == "Operational history"
+    assert contextual[0].before.line == 2
+
+    unrelated = compare_requirements(
+        "v1", before, "v2", "# Operational history\nCalibrate sensors.", model
+    )
+    assert [item.kind for item in unrelated] == ["removed", "added"]

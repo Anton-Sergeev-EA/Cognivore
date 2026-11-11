@@ -33,7 +33,9 @@ function element(tag, text) {
 function citation(side, value) {
   const node = document.createElement("section");
   const source = value ? `${side} · ${value.source}:${value.line}` : side;
-  node.append(element("h4", source), element("blockquote", value?.text ?? "No matching line"));
+  node.append(element("h4", source));
+  if (value?.section) node.append(element("p", value.section));
+  node.append(element("blockquote", value?.text ?? "No matching line"));
   return node;
 }
 

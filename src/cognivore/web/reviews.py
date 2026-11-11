@@ -51,6 +51,7 @@ class Review(BaseModel):
                     lines.extend(
                         [
                             f"    {side} | {citation.source}:{citation.line}",
+                            *([f"    {citation.section}"] if citation.section else []),
                             f"    {citation.text}",
                             "",
                         ]
