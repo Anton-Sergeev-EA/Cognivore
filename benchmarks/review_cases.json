@@ -1,0 +1,62 @@
+[
+  {
+    "name": "reordered and revised storage policy",
+    "before": ["The collector must retain audit records for 90 days.", "NET-1: The collector shall encrypt telemetry.", "OPS-4: The collector may retry uploads during maintenance."],
+    "after": ["OPS-4: The collector must retry uploads only if maintenance is scheduled.", "NET-1: The collector shall encrypt telemetry.", "The collector must keep audit logs for 180 days."],
+    "expected": [["changed", 1, 3], ["changed", 3, 1]]
+  },
+  {
+    "name": "independent addition and removal",
+    "before": ["OPS-1: Record compressor temperature.", "OPS-2: Print diagnostic snapshots."],
+    "after": ["OPS-1: Record compressor temperature.", "SEC-1: Authenticate remote administrators."],
+    "expected": [["removed", 2, null], ["added", null, 2]]
+  },
+  {
+    "name": "one-to-many ambiguous change",
+    "before": ["The gateway must retain event logs for 30 days."],
+    "after": ["The gateway must retain event logs for 60 days.", "The gateway must retain event logs for 90 days."],
+    "expected": [["ambiguous", 1, null]]
+  },
+  {
+    "name": "similar wording but distinct identifiers",
+    "before": ["SEC-1: The gateway must encrypt messages in transit."],
+    "after": ["SEC-2: The gateway must encrypt messages at rest."],
+    "expected": [["removed", 1, null], ["added", null, 1]]
+  },
+  {
+    "name": "pure reordering",
+    "before": ["Open the service hatch.", "Check the pressure gauge.", "Close the service hatch."],
+    "after": ["Check the pressure gauge.", "Close the service hatch.", "Open the service hatch."],
+    "expected": []
+  },
+  {
+    "name": "duplicate unchanged requirement",
+    "before": ["Check the pressure gauge.", "Check the pressure gauge."],
+    "after": ["Check the pressure gauge."],
+    "expected": [["removed", 2, null]]
+  },
+  {
+    "name": "different numbers in similar requirements",
+    "before": ["The inlet valve must close within 10 seconds.", "The outlet valve must close within 15 seconds."],
+    "after": ["The outlet valve must close within 20 seconds.", "The inlet valve must close within 8 seconds."],
+    "expected": [["changed", 1, 2], ["changed", 2, 1]]
+  },
+  {
+    "name": "German condition change",
+    "before": ["NET-4: Das Gateway darf erneut senden, wenn der Puffer voll ist."],
+    "after": ["NET-4: Das Gateway muss erneut senden, nur wenn der Puffer voll ist."],
+    "expected": [["changed", 1, 1]]
+  },
+  {
+    "name": "Russian minimum runtime",
+    "before": ["PWR-1: Шлюз должен работать от батареи не менее 30 минут."],
+    "after": ["PWR-1: Шлюз должен работать от батареи не менее 45 минут."],
+    "expected": [["changed", 1, 1]]
+  },
+  {
+    "name": "requirement renumbered with a stable identifier elsewhere",
+    "before": ["NET-1: The gateway must limit outbound connections to 10.", "NET-2: The gateway must encrypt outbound traffic."],
+    "after": ["NET-2: The gateway must encrypt outbound traffic.", "NET-3: The gateway must limit outbound connections to 20."],
+    "expected": [["ambiguous", 1, null]]
+  }
+]

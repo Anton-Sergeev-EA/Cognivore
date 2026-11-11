@@ -526,3 +526,8 @@ Requirement IDs help align rewritten text. Similarity is heuristic, so
 verify the cited lines before relying on a finding. The English demo and
 German and Russian signal tests cover specific cases. They do not measure
 accuracy on arbitrary documents.
+
+The [specification review benchmark](benchmarks/REVIEW.md) reports
+precision, recall and CPU timings against two baselines. It includes an
+annotated regression corpus and a published NIST excerpt where the
+offline matcher missed the intended alignment.

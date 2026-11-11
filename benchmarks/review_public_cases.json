@@ -1,0 +1,10 @@
+[
+  {
+    "name": "NIST SP 800-63B password minimum length",
+    "before_source": "https://pages.nist.gov/800-63-3/sp800-63b.html#sec5",
+    "after_source": "https://pages.nist.gov/800-63-4/sp800-63b.html#passwordver",
+    "before": ["Verifiers SHALL require subscriber-chosen memorized secrets to be at least 8 characters in length."],
+    "after": ["SHALL require passwords that are used as a single-factor authentication mechanism to be a minimum of 15 characters in length."],
+    "expected": [["changed", 1, 1]]
+  }
+]
