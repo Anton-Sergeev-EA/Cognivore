@@ -42,3 +42,32 @@ def test_review_resumes_and_publishes_selected_findings(tmp_path: Path) -> None:
         assert client.post(f"{url}/publish").status_code == 200
         assert client.get(f"{url}/report").content == report.content
         assert client.put(f"{url}/findings/1", json={"decision": "accepted"}).status_code == 409
+
+
+def test_ambiguous_report_preserves_alternative_citations(tmp_path: Path) -> None:
+    settings = Settings(
+        data_dir=tmp_path, prefer_semantic_embedder=False, llm_provider="fake", seed_demo_kb=False
+    )
+    with TestClient(create_app(settings)) as client:
+        response = client.post(
+            "/api/reviews",
+            files={
+                "before": ("old.md", "The gateway must retain event logs for 30 days."),
+                "after": (
+                    "new.md",
+                    "The gateway must retain event logs for 60 days.\n"
+                    "The gateway must retain event logs for 90 days.",
+                ),
+            },
+        )
+        assert response.status_code == 201
+        review = response.json()
+        assert len(review["findings"]) == 1
+        assert review["findings"][0]["kind"] == "ambiguous"
+        assert len(review["findings"][0]["alternatives"]) == 1
+        url = f"/api/reviews/{review['id']}"
+        assert client.put(f"{url}/findings/0", json={"decision": "accepted"}).status_code == 200
+        assert client.post(f"{url}/publish").status_code == 200
+        report = client.get(f"{url}/report").text
+        assert "60 days" in report and "90 days" in report
+        assert "Alternative | new.md:" in report

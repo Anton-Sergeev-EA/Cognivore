@@ -37,7 +37,10 @@ def test_equally_plausible_matches_are_marked_ambiguous() -> None:
         "The gateway must retain event logs for 90 days.",
         HashingEmbedder(),
     )
+    assert len(findings) == 1
     assert findings[0].kind == "ambiguous"
+    assert findings[0].after is not None
+    assert {findings[0].after.line, *(item.line for item in findings[0].alternatives)} == {1, 2}
 
 
 def test_number_obligation_and_condition_changes_in_german_and_russian() -> None:
@@ -56,3 +59,14 @@ def test_number_obligation_and_condition_changes_in_german_and_russian() -> None
         assert len(findings) == 1
         assert findings[0].kind == "changed"
         assert findings[0].signals == ["number or unit", "obligation", "condition or exception"]
+
+
+def test_renumbered_requirement_is_flagged_without_asserting_a_match() -> None:
+    findings = compare_requirements(
+        "v1",
+        "NET-1: The gateway must limit outbound connections to 10.",
+        "v2",
+        "NET-3: The gateway must limit outbound connections to 20.",
+        HashingEmbedder(),
+    )
+    assert [item.kind for item in findings] == ["ambiguous"]

@@ -44,7 +44,9 @@ class Review(BaseModel):
             lines.extend([f"## {finding.kind.title()}", ""])
             if finding.signals:
                 lines.extend([", ".join(finding.signals), ""])
-            for side, citation in (("Before", finding.before), ("After", finding.after)):
+            citations = [("Before", finding.before), ("After", finding.after)]
+            citations.extend(("Alternative", candidate) for candidate in finding.alternatives)
+            for side, citation in citations:
                 if citation:
                     lines.extend(
                         [

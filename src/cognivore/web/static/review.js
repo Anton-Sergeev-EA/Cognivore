@@ -51,6 +51,13 @@ function render(review, focusIndex, focusChoice) {
     sources.className = "sources";
     sources.append(citation("Before", finding.before), citation("After", finding.after));
     card.append(sources);
+    if (finding.alternatives.length) {
+      card.append(element("h4", "Other possible matches"));
+      const alternatives = document.createElement("div");
+      alternatives.className = "sources";
+      for (const candidate of finding.alternatives) alternatives.append(citation("After", candidate));
+      card.append(alternatives);
+    }
     if (!review.published) {
       const choices = document.createElement("div");
       choices.className = "choices";

@@ -57,6 +57,7 @@ class Finding(BaseModel):
     before: Citation | None = None
     after: Citation | None = None
     signals: list[str] = []
+    alternatives: list[Citation] = []
 
 
 def _citations(source: str, text: str) -> list[Citation]:
@@ -138,7 +139,7 @@ def compare_requirements(
 
     left = [i for i in range(len(before)) if i not in paired]
     right = sorted(unmatched)
-    uncertain = {}
+    uncertain: dict[int, list[int]] = {}
     if left and right:
         texts = [_matching_text(before[i]) for i in left]
         texts.extend(_matching_text(after[j]) for j in right)
@@ -148,13 +149,17 @@ def compare_requirements(
         semantic = vectors[: len(left)] @ vectors[len(left) :].T
         terms = [_terms(value) for value in texts]
         scores = np.zeros_like(semantic)
+        renumbered: set[tuple[int, int]] = set()
         for x, i in enumerate(left):
             old_id = _requirement_id(before[i])
             for y, j in enumerate(right):
                 new_id = _requirement_id(after[j])
-                if old_id and new_id and old_id != new_id:
-                    continue
                 first, second = terms[x], terms[len(left) + y]
+                if old_id and new_id and old_id != new_id:
+                    if first and texts[x].strip() == texts[len(left) + y].strip():
+                        scores[x, y] = 1.0
+                        renumbered.add((x, y))
+                    continue
                 overlap = len(first & second) / max(1, len(first | second))
                 scores[x, y] = 0.55 * overlap + 0.45 * max(0, semantic[x, y])
         for x, i in enumerate(left):
@@ -165,11 +170,21 @@ def compare_requirements(
                 continue
             competing = max((scores[x, k] for k in ranked[1:]), default=0)
             reverse = max((scores[k, y] for k in range(len(left)) if k != x), default=0)
-            if score >= 0.50 and score - max(competing, reverse) >= 0.08:
+            if (
+                (x, y) not in renumbered
+                and score >= 0.50
+                and score - max(competing, reverse) >= 0.08
+            ):
                 paired[i] = right[y]
                 unmatched.remove(right[y])
             else:
-                uncertain[i] = right[y]
+                uncertain[i] = [right[k] for k in ranked if scores[x, k] >= max(0.35, score - 0.08)]
+
+    uncertain = {
+        i: available
+        for i, options in uncertain.items()
+        if (available := [j for j in options if j in unmatched])
+    }
 
     findings = []
     for i, citation in enumerate(before):
@@ -185,10 +200,19 @@ def compare_requirements(
                     )
                 )
         elif i in uncertain:
-            findings.append(Finding(kind="ambiguous", before=citation, after=after[uncertain[i]]))
+            best, *alternatives = uncertain[i]
+            findings.append(
+                Finding(
+                    kind="ambiguous",
+                    before=citation,
+                    after=after[best],
+                    alternatives=[after[j] for j in alternatives],
+                )
+            )
         else:
             findings.append(Finding(kind="removed", before=citation))
     findings.extend(
-        Finding(kind="added", after=after[j]) for j in sorted(unmatched - set(uncertain.values()))
+        Finding(kind="added", after=after[j])
+        for j in sorted(unmatched - {j for options in uncertain.values() for j in options})
     )
     return findings
