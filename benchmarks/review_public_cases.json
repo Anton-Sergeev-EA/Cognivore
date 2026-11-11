@@ -3,8 +3,42 @@
     "name": "NIST SP 800-63B password minimum length",
     "before_source": "https://pages.nist.gov/800-63-3/sp800-63b.html#sec5",
     "after_source": "https://pages.nist.gov/800-63-4/sp800-63b.html#passwordver",
-    "before": ["Verifiers SHALL require subscriber-chosen memorized secrets to be at least 8 characters in length."],
-    "after": ["SHALL require passwords that are used as a single-factor authentication mechanism to be a minimum of 15 characters in length."],
-    "expected": [["changed", 1, 1]]
+    "before": [
+      "# Memorized Secret Verifiers",
+      "Verifiers SHALL require subscriber-chosen memorized secrets to be at least 8 characters in length."
+    ],
+    "after": [
+      "# Password Verifiers",
+      "SHALL require passwords that are used as a single-factor authentication mechanism to be a minimum of 15 characters in length."
+    ],
+    "expected": [
+      [
+        "changed",
+        2,
+        2
+      ]
+    ]
+  },
+  {
+    "name": "WCAG 2.1 to 2.2 adds a separate minimum target-size criterion",
+    "before_source": "https://www.w3.org/TR/WCAG21/#target-size",
+    "after_source": "https://www.w3.org/TR/WCAG22/#target-size-minimum",
+    "before": [
+      "# Target Size",
+      "Criterion 2.5.5 sets a 44-by-44 CSS pixel target size for pointer input, subject to exceptions."
+    ],
+    "after": [
+      "# Target Size (Enhanced)",
+      "Criterion 2.5.5 sets a 44-by-44 CSS pixel target size for pointer input, subject to exceptions.",
+      "# Target Size (Minimum)",
+      "Criterion 2.5.8 sets a 24-by-24 CSS pixel target size for pointer input, subject to exceptions."
+    ],
+    "expected": [
+      [
+        "added",
+        null,
+        4
+      ]
+    ]
   }
 ]

@@ -531,3 +531,6 @@ The [specification review benchmark](benchmarks/REVIEW.md) reports
 precision, recall and CPU timings against two baselines. It includes an
 annotated regression corpus and a published NIST excerpt where the
 offline matcher missed the intended alignment.
+
+Markdown headings appear alongside the source quotes and can help align rewritten
+requirements when a semantic embedder is configured.

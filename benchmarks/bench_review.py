@@ -6,6 +6,7 @@ import argparse
 import json
 from collections.abc import Callable
 from difflib import SequenceMatcher
+from functools import partial
 from pathlib import Path
 from statistics import median
 from time import perf_counter
@@ -13,7 +14,7 @@ from typing import TypedDict
 
 import numpy as np
 
-from cognivore.rag.embeddings import HashingEmbedder
+from cognivore.rag.embeddings import EmbeddingModel, FastEmbedModel, HashingEmbedder
 from cognivore.review import compare_requirements
 
 FindingKey = tuple[str, int | None, int | None]
@@ -65,9 +66,37 @@ def vector_only(before: list[str], after: list[str]) -> Findings:
     return findings
 
 
-def cognivore(before: list[str], after: list[str]) -> Findings:
+def without_headings(
+    method: Callable[[list[str], list[str]], Findings], before: list[str], after: list[str]
+) -> Findings:
+    left, right = (
+        [
+            index
+            for index, text in enumerate(lines, 1)
+            if text.strip() and not text.lstrip().startswith("#")
+        ]
+        for lines in (before, after)
+    )
+    return {
+        (kind, left[i - 1] if i is not None else None, right[j - 1] if j is not None else None)
+        for kind, i, j in method([before[i - 1] for i in left], [after[j - 1] for j in right])
+    }
+
+
+def cognivore(
+    before: list[str],
+    after: list[str],
+    *,
+    embedder: EmbeddingModel,
+    use_section_context: bool = False,
+) -> Findings:
     findings = compare_requirements(
-        "before", "\n".join(before), "after", "\n".join(after), HashingEmbedder()
+        "before",
+        "\n".join(before),
+        "after",
+        "\n".join(after),
+        embedder,
+        use_section_context=use_section_context,
     )
     return {
         (
@@ -83,6 +112,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repeat", type=int, default=20)
     parser.add_argument("--cases", type=Path, default=Path(__file__).with_name("review_cases.json"))
+    parser.add_argument(
+        "--semantic-model", help="Also test a FastEmbed model with and without section context."
+    )
     args = parser.parse_args()
     if args.repeat < 1:
         parser.error("--repeat must be positive")
@@ -90,10 +122,16 @@ def main() -> None:
     if not cases:
         parser.error("the corpus must contain at least one case")
     methods: dict[str, Callable[[list[str], list[str]], Findings]] = {
-        "line diff": line_diff,
-        "vector only": vector_only,
-        "Cognivore": cognivore,
+        "line diff": partial(without_headings, line_diff),
+        "vector only": partial(without_headings, vector_only),
+        "Cognivore (hashing)": partial(cognivore, embedder=HashingEmbedder()),
     }
+    if args.semantic_model:
+        semantic = FastEmbedModel(args.semantic_model)
+        methods["Cognivore (semantic)"] = partial(cognivore, embedder=semantic)
+        methods["Cognivore (semantic + sections)"] = partial(
+            cognivore, embedder=semantic, use_section_context=True
+        )
     for name, method in methods.items():
         tp = fp = fn = 0
         elapsed = []
