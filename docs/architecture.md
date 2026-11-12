@@ -223,10 +223,29 @@ documents again. A Python-only installation rebuilds an exact NumPy index
 from the same vectors. Direct Python callers can use `serialize()` and
 `HNSWIndex.deserialize(blob)`.
 
+## Compressed vector scans
+
+The standalone Python API offers two batch-built NumPy indexes:
+
+- `ScalarQuantizedIndex(ids, vectors)` quantizes each normalized row to
+  signed 8-bit coordinates. A per-row inverse norm preserves cosine
+  scoring against the quantized direction.
+- `ProductQuantizedIndex(ids, vectors, subspaces=8, clusters=256)` learns
+  one codebook per subspace and stores one byte per subspace and vector.
+  An optional `training_vectors` matrix can come from a separate sample.
+  Queries use centroid lookup tables and cosine scores against the
+  reconstructed direction.
+
+Both expose `search(query, k)` and `storage_bytes`. They scan their
+compressed codes and can be used without the C++ extension. The
+knowledge-base backend uses HNSW for approximate retrieval. See
+[BENCHMARKS.md](../BENCHMARKS.md#quantized-vector-scans) for the conditions
+and measured trade-offs.
+
 ## Roadmap
 
-- [ ] Scalar and product quantization, optional ANN backends, and
-      cross-backend recall, latency and memory benchmarks.
+- [ ] Compressed storage for the knowledge-base index, optional ANN
+      backends, and cross-backend recall, latency and memory benchmarks.
 - [ ] Real speaker diarization (pyannote) behind the same
       `diarize_by_energy` interface, as a heavier optional extra.
 - [ ] A lightweight CPU-friendly captioning model for footage with neither

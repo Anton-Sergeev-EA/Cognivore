@@ -114,6 +114,8 @@ dependencies are missing) are implemented rather than imported.
   present at install time. Approximate retrieval now uses
   [multi-layer HNSW](docs/architecture.md#native-hnsw). Existing NSW
   knowledge bases migrate from their saved vectors when available.
+  The Python API also exposes standalone SQ8 and PQ scans with
+  [measured memory and recall trade-offs](BENCHMARKS.md#quantized-vector-scans).
 - **Hybrid RAG**: recursive-splitter chunking, `fastembed` (ONNX, no
   PyTorch) semantic embeddings with a zero-download hashing-trick fallback,
   vector + BM25 hybrid retrieval.
