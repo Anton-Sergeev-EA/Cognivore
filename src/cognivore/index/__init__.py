@@ -19,6 +19,7 @@ from typing import Any
 
 from .python_index import FlatIndexPy
 from .python_index import SearchResult as SearchResultPy
+from .quantized import ProductQuantizedIndex, ScalarQuantizedIndex
 
 logger = logging.getLogger(__name__)
 
@@ -56,4 +57,12 @@ except ImportError:  # pragma: no cover - exercised in CI without a compiler
     SearchResult = SearchResultPy
     is_native = False
 
-__all__ = ["FlatIndex", "HNSWIndex", "NSWIndex", "SearchResult", "is_native"]
+__all__ = [
+    "FlatIndex",
+    "HNSWIndex",
+    "NSWIndex",
+    "ProductQuantizedIndex",
+    "ScalarQuantizedIndex",
+    "SearchResult",
+    "is_native",
+]
