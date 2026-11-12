@@ -14,7 +14,13 @@ from pydantic import BaseModel
 from starlette.responses import PlainTextResponse
 
 from cognivore.rag.embeddings import EmbeddingModel
-from cognivore.review import MAX_DOCUMENT_BYTES, Finding, compare_requirements
+from cognivore.review import Finding, compare_citations
+from cognivore.review_documents import (
+    MAX_UPLOAD_BYTES,
+    DocumentSupportUnavailable,
+    ReviewDocument,
+    read_review_document,
+)
 
 Decision = Literal["accepted", "rejected", "pending"]
 
@@ -30,6 +36,7 @@ class Review(BaseModel):
     findings: list[Finding]
     decisions: list[Decision]
     published: bool = False
+    warnings: list[str] = []
 
     def report(self) -> str:
         lines = [
@@ -38,6 +45,8 @@ class Review(BaseModel):
             f"    {self.before_name} → {self.after_name}",
             "",
         ]
+        if self.warnings:
+            lines.extend(["## Import notes", "", *(f"    {note}" for note in self.warnings), ""])
         for finding, decision in zip(self.findings, self.decisions, strict=True):
             if decision != "accepted":
                 continue
@@ -48,9 +57,14 @@ class Review(BaseModel):
             citations.extend(("Alternative", candidate) for candidate in finding.alternatives)
             for side, citation in citations:
                 if citation:
+                    location = f"{citation.source}:{citation.line}"
+                    if citation.page is not None:
+                        location = f"{citation.source}, page {citation.page}"
+                    elif citation.paragraph is not None:
+                        location = f"{citation.source}, paragraph {citation.paragraph}"
                     lines.extend(
                         [
-                            f"    {side} | {citation.source}:{citation.line}",
+                            f"    {side} | {location}",
                             *([f"    {citation.section}"] if citation.section else []),
                             f"    {citation.text}",
                             "",
@@ -93,16 +107,18 @@ class ReviewStore:
         return Review.model_validate_json(row[0]), row[1]
 
 
-def _read(file: UploadFile) -> tuple[str, str]:
+def _read(file: UploadFile) -> tuple[str, ReviewDocument]:
     name = Path((file.filename or "document").replace("\\", "/")).name
     name = " ".join(name.split())[:160] or "document"
-    data = file.file.read(MAX_DOCUMENT_BYTES + 1)
-    if len(data) > MAX_DOCUMENT_BYTES:
-        raise HTTPException(413, "Each document must be at most 128 KiB.")
+    data = file.file.read(MAX_UPLOAD_BYTES + 1)
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, "Each file must be at most 8 MiB.")
     try:
-        return name, data.decode("utf-8-sig")
-    except UnicodeDecodeError as exc:
-        raise HTTPException(422, "Upload a UTF-8 text or Markdown file.") from exc
+        return name, read_review_document(name, data)
+    except DocumentSupportUnavailable as exc:
+        raise HTTPException(503, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 def review_router(path: Path, embedder: EmbeddingModel) -> APIRouter:
@@ -111,20 +127,16 @@ def review_router(path: Path, embedder: EmbeddingModel) -> APIRouter:
 
     @router.post("", status_code=201)
     def create(before: UploadFile, after: UploadFile) -> Review:
-        before_name, before_text = _read(before)
-        after_name, after_text = _read(after)
-        try:
-            findings = compare_requirements(
-                before_name, before_text, after_name, after_text, embedder
-            )
-        except ValueError as exc:
-            raise HTTPException(422, str(exc)) from exc
+        before_name, old_document = _read(before)
+        after_name, new_document = _read(after)
+        findings = compare_citations(old_document.citations, new_document.citations, embedder)
         review = Review(
             id=uuid4(),
             before_name=before_name,
             after_name=after_name,
             findings=findings,
             decisions=["pending"] * len(findings),
+            warnings=old_document.warnings + new_document.warnings,
         )
         store.create(review)
         return review

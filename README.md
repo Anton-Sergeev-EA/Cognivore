@@ -503,8 +503,8 @@ cognivore approve-comparison RUN_ID
 ## Review specifications in the browser
 
 Start `cognivore serve` and open **Review specifications** in the sidebar.
-Upload two UTF-8 text or Markdown files with one requirement per line. The
-review shows source lines side by side and highlights possible changes in
+Upload two revisions as UTF-8 text, Markdown, DOCX or text-based PDF. Put
+one requirement per line in text and Markdown. The review shows citations side by side and highlights possible changes in
 numbers, units, obligations and conditions. Check ambiguous matches against
 both quotes. Accept or reject the findings, then confirm publication and
 download the Markdown report. Bookmark the review URL to reopen saved
@@ -521,7 +521,20 @@ checks that equally plausible matches are flagged as ambiguous.
 pytest tests/test_review.py tests/test_review_web.py
 ```
 
-The review supports up to 128 KiB and 250 non-heading lines per version.
+To enable DOCX and PDF imports, install the optional parsers.
+
+```bash
+pip install 'cognivore[documents]'
+```
+
+DOCX citations point to body paragraphs and include Word heading styles.
+PDF citations point to pages and use extracted text lines. The review
+reports skipped tables and PDF pages without extractable text. Run OCR
+before uploading a scanned PDF. Use text or Markdown for documents whose
+PDF layout splits a requirement across several lines.
+
+Each upload is limited to 8 MiB, 128 KiB of extracted text and 250
+comparison items. PDFs can contain up to 100 pages.
 Requirement IDs help align rewritten text. Similarity is heuristic, so
 verify the cited lines before relying on a finding. The English demo and
 German and Russian signal tests cover specific cases. They do not measure

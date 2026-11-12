@@ -51,6 +51,8 @@ class Citation(BaseModel):
     line: int
     text: str
     section: str = ""
+    page: int | None = None
+    paragraph: int | None = None
 
 
 class Finding(BaseModel):
@@ -61,7 +63,7 @@ class Finding(BaseModel):
     alternatives: list[Citation] = []
 
 
-def _citations(source: str, text: str) -> list[Citation]:
+def text_citations(source: str, text: str) -> list[Citation]:
     if len(text.encode("utf-8")) > MAX_DOCUMENT_BYTES:
         raise ValueError("Each document must be at most 128 KiB.")
     citations = []
@@ -120,8 +122,21 @@ def compare_requirements(
     *,
     use_section_context: bool = True,
 ) -> list[Finding]:
-    before = _citations(before_name, before_text)
-    after = _citations(after_name, after_text)
+    return compare_citations(
+        text_citations(before_name, before_text),
+        text_citations(after_name, after_text),
+        embedder,
+        use_section_context=use_section_context,
+    )
+
+
+def compare_citations(
+    before: list[Citation],
+    after: list[Citation],
+    embedder: EmbeddingModel,
+    *,
+    use_section_context: bool = True,
+) -> list[Finding]:
     unmatched = set(range(len(after)))
     paired: dict[int, int] = {}
     by_text: dict[str, list[int]] = defaultdict(list)

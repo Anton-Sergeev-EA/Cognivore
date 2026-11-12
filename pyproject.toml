@@ -49,8 +49,10 @@ dependencies = [
 llm = ["llama-cpp-python>=0.2.90"]
 audio = ["faster-whisper>=1.0"]
 video = ["opencv-python-headless>=4.9", "pytesseract>=0.3.10"]
-all = ["cognivore[llm,audio,video]"]
+documents = ["python-docx>=1.1", "pypdf>=6.1"]
+all = ["cognivore[llm,audio,video,documents]"]
 dev = [
+    "cognivore[documents]",
     "pytest>=8.1",
     "pytest-asyncio>=0.23.5",
     "pytest-cov>=5.0",

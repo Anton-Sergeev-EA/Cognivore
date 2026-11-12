@@ -4,6 +4,7 @@ const status = document.querySelector("#status");
 const panel = document.querySelector("#review");
 const title = document.querySelector("#title");
 const findings = document.querySelector("#findings");
+const importNotes = document.querySelector("#import-notes");
 const publish = document.querySelector("#publish");
 const download = document.querySelector("#download");
 const labels = {
@@ -32,7 +33,13 @@ function element(tag, text) {
 
 function citation(side, value) {
   const node = document.createElement("section");
-  const source = value ? `${side} · ${value.source}:${value.line}` : side;
+  let source = side;
+  if (value) {
+    let location = `${value.source}:${value.line}`;
+    if (value.page != null) location = `${value.source}, page ${value.page}`;
+    if (value.paragraph != null) location = `${value.source}, paragraph ${value.paragraph}`;
+    source = `${side} · ${location}`;
+  }
   node.append(element("h4", source));
   if (value?.section) node.append(element("p", value.section));
   node.append(element("blockquote", value?.text ?? "No matching line"));
@@ -43,6 +50,8 @@ function render(review, focusIndex, focusChoice) {
   current = review;
   panel.hidden = false;
   title.textContent = `${review.before_name} → ${review.after_name}`;
+  importNotes.replaceChildren(...review.warnings.map((note) => element("li", note)));
+  importNotes.hidden = !review.warnings.length;
   findings.replaceChildren();
   if (!review.findings.length) findings.append(element("p", "No requirement changes found."));
   review.findings.forEach((finding, index) => {

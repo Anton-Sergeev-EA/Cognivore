@@ -11,10 +11,10 @@
   <main>
     <a href="/">← Cognivore chat</a>
     <h1>Review specifications</h1>
-    <p>Compare two UTF-8 text or Markdown files. Put each requirement on its own line.</p>
+    <p>Compare two revisions in text, Markdown, DOCX, or text-based PDF.</p>
     <form id="upload">
-      <label>Earlier revision <input name="before" type="file" accept=".txt,.md,.markdown" required></label>
-      <label>Later revision <input name="after" type="file" accept=".txt,.md,.markdown" required></label>
+      <label>Earlier revision <input name="before" type="file" accept=".txt,.md,.markdown,.docx,.pdf" required></label>
+      <label>Later revision <input name="after" type="file" accept=".txt,.md,.markdown,.docx,.pdf" required></label>
       <button>Compare files</button>
       <button id="demo" type="button">Try the English demo</button>
     </form>
@@ -22,6 +22,7 @@
     <section id="review" aria-labelledby="title" hidden>
       <h2 id="title"></h2>
       <p>Bookmark this page to resume your review later. Accept findings to include them in the report.</p>
+      <ul id="import-notes" hidden></ul>
       <div id="findings"></div>
       <footer>
         <button id="publish" type="button">Confirm and publish report</button>
