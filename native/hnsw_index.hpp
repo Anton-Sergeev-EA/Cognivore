@@ -2,6 +2,7 @@
 
 #include "vector_index.hpp"
 
+#include <memory>
 #include <shared_mutex>
 
 namespace cognivore {
@@ -18,6 +19,10 @@ public:
     size_t size() const;
     size_t dim() const noexcept { return dim_; }
     size_t max_level() const;
+
+    /// Versioned, little-endian snapshot of vectors and adjacency lists.
+    std::vector<uint8_t> serialize() const;
+    static std::unique_ptr<HNSWIndex> deserialize(const uint8_t* data, size_t size);
 
 private:
     using NodeId = uint32_t;
@@ -40,6 +45,7 @@ private:
     size_t ef_construction_;
     size_t max_level_ = 0;
     NodeId entry_ = 0;
+    uint32_t seed_;
     std::mt19937 rng_;
     mutable std::shared_mutex mutex_;
     std::vector<VectorId> ids_;

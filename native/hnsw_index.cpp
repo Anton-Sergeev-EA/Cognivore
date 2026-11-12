@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <functional>
 #include <limits>
 #include <mutex>
@@ -11,6 +12,37 @@
 
 namespace cognivore {
 namespace {
+constexpr uint32_t snapshot_magic = 0x57534e48; // HNSW
+constexpr uint32_t snapshot_version = 1;
+
+template <class T> void append(std::vector<uint8_t>& bytes, T value) {
+    for (size_t i = 0; i < sizeof(T); ++i) {
+        bytes.push_back(static_cast<uint8_t>(value >> (8 * i)));
+    }
+}
+
+class SnapshotReader {
+public:
+    SnapshotReader(const uint8_t* bytes, size_t size) : bytes_(bytes), remaining_(size) {}
+
+    template <class T> T read() {
+        if (remaining_ < sizeof(T)) throw std::invalid_argument("truncated HNSW snapshot");
+        T value = 0;
+        for (size_t i = 0; i < sizeof(T); ++i) {
+            value |= static_cast<T>(bytes_[i]) << (8 * i);
+        }
+        bytes_ += sizeof(T);
+        remaining_ -= sizeof(T);
+        return value;
+    }
+
+    size_t remaining() const noexcept { return remaining_; }
+
+private:
+    const uint8_t* bytes_;
+    size_t remaining_;
+};
+
 std::vector<float> unit_vector(const std::vector<float>& input, size_t dim) {
     if (input.size() != dim) throw std::invalid_argument("vector dimension mismatch");
     double squared = 0.0;
@@ -28,7 +60,7 @@ std::vector<float> unit_vector(const std::vector<float>& input, size_t dim) {
 } // namespace
 
 HNSWIndex::HNSWIndex(size_t dim, size_t m, size_t ef_construction, uint32_t seed)
-    : dim_(dim), m_(m), ef_construction_(ef_construction), rng_(seed) {
+    : dim_(dim), m_(m), ef_construction_(ef_construction), seed_(seed), rng_(seed) {
     if (dim == 0) throw std::invalid_argument("dimension must be positive");
     if (m < 2 || m > 1024) throw std::invalid_argument("m must be between 2 and 1024");
     if (ef_construction < m) throw std::invalid_argument("ef_construction must be at least m");
@@ -204,6 +236,114 @@ size_t HNSWIndex::size() const {
 size_t HNSWIndex::max_level() const {
     const std::shared_lock lock(mutex_);
     return max_level_;
+}
+
+
+std::vector<uint8_t> HNSWIndex::serialize() const {
+    const std::shared_lock lock(mutex_);
+    std::vector<uint8_t> bytes;
+    append(bytes, snapshot_magic);
+    append(bytes, snapshot_version);
+    append(bytes, static_cast<uint64_t>(dim_));
+    append(bytes, static_cast<uint32_t>(m_));
+    append(bytes, static_cast<uint64_t>(ef_construction_));
+    append(bytes, seed_);
+    append(bytes, static_cast<uint32_t>(ids_.size()));
+    append(bytes, entry_);
+    for (VectorId id : ids_) {
+        uint64_t bits;
+        std::memcpy(&bits, &id, sizeof(bits));
+        append(bytes, bits);
+    }
+    for (float value : data_) {
+        static_assert(sizeof(float) == sizeof(uint32_t) && std::numeric_limits<float>::is_iec559);
+        uint32_t bits;
+        std::memcpy(&bits, &value, sizeof(bits));
+        append(bytes, bits);
+    }
+    for (const auto& layers : graph_) {
+        append(bytes, static_cast<uint32_t>(layers.size()));
+        for (const auto& edges : layers) {
+            append(bytes, static_cast<uint32_t>(edges.size()));
+            for (NodeId target : edges) append(bytes, target);
+        }
+    }
+    return bytes;
+}
+
+std::unique_ptr<HNSWIndex> HNSWIndex::deserialize(const uint8_t* data, size_t size) {
+    SnapshotReader reader(data, size);
+    if (reader.read<uint32_t>() != snapshot_magic || reader.read<uint32_t>() != snapshot_version) {
+        throw std::invalid_argument("unsupported HNSW snapshot format");
+    }
+    const auto dim = reader.read<uint64_t>();
+    const auto m = reader.read<uint32_t>();
+    const auto ef = reader.read<uint64_t>();
+    const auto seed = reader.read<uint32_t>();
+    const auto count = reader.read<uint32_t>();
+    const auto entry = reader.read<NodeId>();
+    if (dim > std::numeric_limits<size_t>::max() || ef > std::numeric_limits<size_t>::max() ||
+        (count == 0 ? entry != 0 : entry >= count)) {
+        throw std::invalid_argument("invalid HNSW snapshot header");
+    }
+    if (count > 0) {
+        const size_t per_node = reader.remaining() / count;
+        constexpr size_t overhead = sizeof(VectorId) + 2 * sizeof(uint32_t);
+        if (per_node < overhead || dim > (per_node - overhead) / sizeof(float)) {
+            throw std::invalid_argument("truncated HNSW snapshot vectors");
+        }
+    }
+
+    auto index = std::make_unique<HNSWIndex>(static_cast<size_t>(dim), m, static_cast<size_t>(ef), seed);
+    index->entry_ = entry;
+    index->ids_.resize(count);
+    for (auto& id : index->ids_) {
+        const auto bits = reader.read<uint64_t>();
+        std::memcpy(&id, &bits, sizeof(id));
+    }
+    index->data_.resize(static_cast<size_t>(count) * static_cast<size_t>(dim));
+    for (float& value : index->data_) {
+        const auto bits = reader.read<uint32_t>();
+        std::memcpy(&value, &bits, sizeof(value));
+        if (!std::isfinite(value)) throw std::invalid_argument("invalid HNSW snapshot vector");
+    }
+    index->graph_.resize(count);
+    for (NodeId node = 0; node < count; ++node) {
+        const auto layers = reader.read<uint32_t>();
+        if (layers == 0 || layers > 33) throw std::invalid_argument("invalid HNSW layer count");
+        index->max_level_ = std::max(index->max_level_, static_cast<size_t>(layers - 1));
+        index->graph_[node].resize(layers);
+        for (size_t layer = 0; layer < layers; ++layer) {
+            const auto degree = reader.read<uint32_t>();
+            if (degree > (layer == 0 ? 2 * m : m)) {
+                throw std::invalid_argument("invalid HNSW node degree");
+            }
+            auto& edges = index->graph_[node][layer];
+            edges.reserve(degree);
+            for (size_t i = 0; i < degree; ++i) {
+                const auto target = reader.read<NodeId>();
+                if (target >= count || target == node) {
+                    throw std::invalid_argument("invalid HNSW edge target");
+                }
+                edges.push_back(target);
+            }
+        }
+    }
+    if (reader.remaining() != 0 ||
+        (count > 0 && index->graph_[entry].size() != index->max_level_ + 1)) {
+        throw std::invalid_argument("invalid HNSW snapshot structure");
+    }
+    for (const auto& layers : index->graph_) {
+        for (size_t layer = 0; layer < layers.size(); ++layer) {
+            for (NodeId target : layers[layer]) {
+                if (index->graph_[target].size() <= layer) {
+                    throw std::invalid_argument("invalid HNSW edge layer");
+                }
+            }
+        }
+    }
+    index->rng_.discard(count);
+    return index;
 }
 
 } // namespace cognivore

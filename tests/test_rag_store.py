@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+
+import pytest
 
 from cognivore.rag.embeddings import HashingEmbedder
 from cognivore.rag.store import DocumentStore
@@ -137,3 +140,50 @@ def test_a_question_in_other_word_forms_finds_its_passage() -> None:
     hits = store.search("Куда компания выходит в следующем квартале?", top_k=2)
 
     assert hits[0].source == "plans"
+
+
+def test_nsw_store_migrates_using_saved_vectors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from cognivore.index import HNSWIndex, NSWIndex
+    from cognivore.rag import store as store_module
+
+    if HNSWIndex is None or NSWIndex is None:
+        pytest.skip("native indexes are required")
+    embedder = HashingEmbedder(dim=32)
+    with monkeypatch.context() as legacy:
+        legacy.setattr(store_module, "HNSWIndex", None)
+        old_store = DocumentStore(embedder)
+        old_store.add_text("The compressor has three stages.", source="manual.md")
+        old_store.save(tmp_path)
+    meta_file = tmp_path / "meta.json"
+    meta = json.loads(meta_file.read_text())
+    assert meta.pop("index_backend") == "nsw"
+    meta["format"] = 2
+    meta_file.write_text(json.dumps(meta))
+
+    with monkeypatch.context() as migration:
+        migration.setattr(embedder, "embed", lambda _texts: pytest.fail("vectors were re-embedded"))
+        upgraded = DocumentStore.load(tmp_path, embedder)
+    assert upgraded.index_rebuilt and not upgraded.reindexed
+    assert upgraded.search("compressor")[0].source == "manual.md"
+    upgraded.save(tmp_path)
+    assert (tmp_path / "index.bin").read_bytes().startswith(b"HNSW")
+
+    restored = DocumentStore.load(tmp_path, embedder)
+    assert not restored.index_rebuilt and not restored.reindexed
+    assert restored.search("compressor") == upgraded.search("compressor")
+
+    # A reader without the extension can search the same saved store.
+    with monkeypatch.context() as fallback:
+        fallback.setattr(store_module, "HNSWIndex", None)
+        fallback.setattr(store_module, "NSWIndex", None)
+        fallback.setattr(store_module, "FlatIndex", store_module.FlatIndexPy)
+        exact = DocumentStore.load(tmp_path, embedder)
+        assert not exact.index_rebuilt and not exact.reindexed
+        assert exact.search("compressor")[0].source == "manual.md"
+
+    (tmp_path / "index.bin").write_bytes(b"HNSW")
+    repaired = DocumentStore.load(tmp_path, embedder)
+    assert repaired.index_rebuilt and not repaired.reindexed
+    assert repaired.search("compressor")[0].source == "manual.md"

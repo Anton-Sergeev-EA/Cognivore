@@ -215,12 +215,16 @@ index.add(42, [1.0, 0.0, 0.0])
 assert index.search([0.9, 0.1, 0.0], k=1, ef=50)[0].id == 42
 ```
 
-The knowledge base still uses its existing NSW persistence and NumPy
-fallback. The HNSW entry point is available for direct evaluation.
+The knowledge base uses HNSW when the native extension provides it and
+approximate search is enabled. The versioned snapshot stores normalized
+vectors, node IDs and graph edges. Existing NSW stores rebuild the index
+from saved vectors when the embedding model matches, without embedding the
+documents again. A Python-only installation rebuilds an exact NumPy index
+from the same vectors. Direct Python callers can use `serialize()` and
+`HNSWIndex.deserialize(blob)`.
 
 ## Roadmap
 
-- [ ] Versioned HNSW persistence and knowledge-base migration.
 - [ ] Scalar and product quantization, optional ANN backends, and
       cross-backend recall, latency and memory benchmarks.
 - [ ] Real speaker diarization (pyannote) behind the same

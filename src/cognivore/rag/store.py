@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import struct
 import threading
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -20,7 +21,8 @@ from typing import Any
 import numpy as np
 from rank_bm25 import BM25Okapi
 
-from cognivore.index import FlatIndex, NSWIndex, is_native
+from cognivore.index import FlatIndex, HNSWIndex, NSWIndex
+from cognivore.index.python_index import FlatIndexPy
 from cognivore.rag.chunking import Chunk, split_text
 from cognivore.rag.embeddings import EmbeddingModel
 from cognivore.rag.tokenize import index_terms
@@ -54,8 +56,15 @@ class DocumentStore:
     ) -> None:
         self.embedder = embedder
         self.vector_weight = vector_weight
-        self._use_ann = use_approximate_index and is_native and NSWIndex is not None
-        self._index = NSWIndex(embedder.dim, 16, 200) if self._use_ann else FlatIndex(embedder.dim)
+        self._prefer_ann = use_approximate_index
+        self._backend = "flat"
+        self._index = FlatIndex(embedder.dim)
+        if use_approximate_index and HNSWIndex is not None:
+            self._backend = "hnsw"
+            self._index = HNSWIndex(embedder.dim)
+        elif use_approximate_index and NSWIndex is not None:
+            self._backend = "nsw"
+            self._index = NSWIndex(embedder.dim, 16, 200)
         self._chunks: dict[int, str] = {}
         self._sources: dict[int, str] = {}
         self._vectors: dict[int, np.ndarray] = {}
@@ -72,6 +81,7 @@ class DocumentStore:
         # (embedder changed, or a store saved by an older version); callers
         # should ``save`` again so it only happens once.
         self.reindexed = False
+        self.index_rebuilt = False
 
     def __len__(self) -> int:
         return len(self._chunks)
@@ -175,7 +185,7 @@ class DocumentStore:
     ) -> list[RetrievedChunk]:
         if not self._chunks:
             return []
-        if self._use_ann:
+        if self._backend != "flat":
             vector_hits = self._index.search(query_vec, min(top_k * 4, len(self._chunks)), ef)
         else:
             vector_hits = self._index.search(query_vec, min(top_k * 4, len(self._chunks)))
@@ -223,11 +233,12 @@ class DocumentStore:
             )
             np.save(directory / "vectors.npy", matrix, allow_pickle=False)
             meta: dict[str, Any] = {
-                "format": 2,
+                "format": 3,
                 "embedder": embedder_id(self.embedder),
                 "dim": self.embedder.dim,
                 "next_id": self._next_id,
-                "use_ann": self._use_ann,
+                "use_ann": self._prefer_ann,
+                "index_backend": self._backend,
                 "chunks": [
                     {"id": cid, "text": self._chunks[cid], "source": self._sources[cid]}
                     for cid in ids
@@ -265,12 +276,37 @@ class DocumentStore:
                 matrix = None
 
         if matrix is not None:
-            blob = (directory / "index.bin").read_bytes()
-            store._index = (
-                NSWIndex.deserialize(blob) if store._use_ann else FlatIndex.deserialize(blob)
-            )
-            for item, vec in zip(items, matrix, strict=True):
-                store._vectors[item["id"]] = vec.astype(np.float32, copy=False)
+            matrix = np.asarray(matrix, dtype=np.float32)
+            saved_backend = meta.get("index_backend", "nsw" if meta["use_ann"] else "flat")
+            restored = False
+            if saved_backend == store._backend:
+                try:
+                    blob = (directory / "index.bin").read_bytes()
+                    if saved_backend == "flat":
+                        dim, count = struct.unpack_from("<QQ", blob)
+                        if (dim, count) != (embedder.dim, len(items)) or len(blob) != (
+                            16 + count * (8 + 4 * dim)
+                        ):
+                            raise ValueError("invalid flat index dimensions")
+                    index = store._index.deserialize(blob)
+                    if index.dim != embedder.dim or len(index) != len(items):
+                        raise ValueError("index dimensions do not match the store")
+                    store._index = index
+                    restored = True
+                except (OSError, RuntimeError, ValueError, struct.error):
+                    logger.warning(
+                        "Could not restore the vector index at %s. Rebuilding.", directory
+                    )
+            ids = [item["id"] for item in items]
+            if not restored:
+                if isinstance(store._index, FlatIndexPy):
+                    store._index = FlatIndexPy.from_vectors(embedder.dim, ids, matrix)
+                else:
+                    for cid, vector in zip(ids, matrix, strict=True):
+                        store._index.add(cid, vector.tolist())
+                # A temporary exact fallback must not overwrite the saved HNSW snapshot.
+                store.index_rebuilt = store._backend != "flat" or saved_backend == "flat"
+            store._vectors.update(zip(ids, matrix, strict=True))
         else:
             logger.info(
                 "Knowledge base at %s was embedded with %r; re-embedding %d chunks with %r.",

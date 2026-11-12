@@ -79,7 +79,7 @@ class Settings(BaseSettings):
     chunk_overlap: int = Field(default=120, ge=0)
     retrieval_top_k: int = Field(default=5, ge=1)
     use_approximate_index: bool = Field(
-        default=True, description="Use the C++ NSWIndex when available instead of exact FlatIndex"
+        default=True, description="Use native HNSW when available instead of exact FlatIndex"
     )
 
     # -- Explainability (cognivore.ml) -----------------------------------

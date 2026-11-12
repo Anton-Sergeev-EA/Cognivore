@@ -111,9 +111,9 @@ dependencies are missing) are implemented rather than imported.
   graph -- insertion, neighbour pruning, greedy beam search), both bound to
   Python via a hand-written pybind11 extension with a `.pyi` type stub.
   Falls back to a pure-NumPy index automatically if no C++ compiler is
-  present at install time. The native extension also exposes an in-memory
-  [multi-layer HNSW index](docs/architecture.md#native-hnsw) for direct use
-  from Python.
+  present at install time. Approximate retrieval now uses
+  [multi-layer HNSW](docs/architecture.md#native-hnsw). Existing NSW
+  knowledge bases migrate from their saved vectors when available.
 - **Hybrid RAG**: recursive-splitter chunking, `fastembed` (ONNX, no
   PyTorch) semantic embeddings with a zero-download hashing-trick fallback,
   vector + BM25 hybrid retrieval.

@@ -82,5 +82,19 @@ PYBIND11_MODULE(_native, m) {
            "Find up to k neighbors using cosine similarity.")
         .def("__len__", &HNSWIndex::size)
         .def_property_readonly("dim", &HNSWIndex::dim)
-        .def_property_readonly("max_level", &HNSWIndex::max_level);
+        .def_property_readonly("max_level", &HNSWIndex::max_level)
+        .def("serialize", [](const HNSWIndex& index) {
+            std::vector<uint8_t> bytes;
+            {
+                const py::gil_scoped_release release;
+                bytes = index.serialize();
+            }
+            return to_py_bytes(bytes);
+        })
+        .def_static("deserialize", [](const py::bytes& blob) {
+            const auto* data = reinterpret_cast<const uint8_t*>(PyBytes_AS_STRING(blob.ptr()));
+            const auto size = static_cast<size_t>(PyBytes_GET_SIZE(blob.ptr()));
+            const py::gil_scoped_release release;
+            return HNSWIndex::deserialize(data, size);
+        }, py::arg("blob"));
 }

@@ -135,14 +135,14 @@ def load_or_build_document_store(
             embedder = build_document_store(settings).embedder
             store = DocumentStore.load(store_dir, embedder=embedder)
             logger.info("Restored knowledge base from %s (%d chunks).", store_dir, len(store))
-            if store.reindexed:
+            if store.reindexed or store.index_rebuilt:
                 # Persist the re-embedded vectors right away so the
                 # (potentially slow) re-embedding happens once, not on
                 # every start.
                 try:
                     store.save(store_dir)
                 except OSError:
-                    logger.warning("Could not persist the re-embedded knowledge base.")
+                    logger.warning("Could not persist the rebuilt knowledge base.")
             return store
         except Exception:
             logger.warning(

@@ -49,6 +49,18 @@ class FlatIndexPy:
         self._ids.append(id)
         self._vectors = np.vstack([self._vectors, vec[None, :]])
 
+    @classmethod
+    def from_vectors(cls, dim: int, ids: list[int], matrix: NDArray[np.float32]) -> FlatIndexPy:
+        """Build in one pass when restoring a store from persisted raw vectors."""
+        if matrix.shape != (len(ids), dim):
+            raise ValueError("vector matrix shape does not match IDs and dimensions")
+        index = cls(dim)
+        index._ids = list(ids)
+        index._vectors = np.array(matrix, dtype=np.float32, copy=True)
+        norms = np.linalg.norm(index._vectors, axis=1, keepdims=True)
+        np.divide(index._vectors, norms, out=index._vectors, where=norms > 1e-10)
+        return index
+
     def search(self, query: list[float], k: int) -> list[SearchResult]:
         if not self._ids:
             return []

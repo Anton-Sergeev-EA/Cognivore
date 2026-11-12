@@ -63,3 +63,31 @@ def test_hnsw_allows_concurrent_insertion_and_search() -> None:
     with ThreadPoolExecutor(max_workers=4) as executor:
         list(executor.map(insert_or_query, range(80)))
     assert len(index) == 41
+
+
+def test_hnsw_snapshot_preserves_graph_and_future_insertions() -> None:
+    index = HNSWIndex(2, m=4, ef_construction=16, seed=7)
+    for key in range(120):
+        index.add(key - 80, [np.sin(key), np.cos(key)])
+    blob = index.serialize()
+    assert blob.startswith(b"HNSW")
+    restored = HNSWIndex.deserialize(blob)
+    assert restored.serialize() == blob
+    assert restored.max_level == index.max_level
+    assert [hit.id for hit in restored.search([1, 0], 10)] == [
+        hit.id for hit in index.search([1, 0], 10)
+    ]
+    for key in range(40):
+        for current in (index, restored):
+            current.add(key + 100, [np.sin(key), np.cos(key)])
+    assert restored.serialize() == index.serialize()
+    assert HNSWIndex.deserialize(HNSWIndex(2).serialize()).search([1, 0], 10) == []
+
+
+def test_hnsw_rejects_invalid_snapshots() -> None:
+    index = HNSWIndex(2)
+    index.add(1, [1, 0])
+    blob = index.serialize()
+    for corrupted in (blob[:7], blob[:-1], blob + b"x", b"nope" + blob[4:]):
+        with pytest.raises(ValueError, match="HNSW"):
+            HNSWIndex.deserialize(corrupted)
