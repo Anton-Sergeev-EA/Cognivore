@@ -1,14 +1,13 @@
 """Vector index backends.
 
-Two collection types (flat/exact and NSW/approximate) are implemented once
-in C++ (``native/vector_index.cpp``) for speed, and exposed to Python via
+Flat, NSW and HNSW indexes are implemented in C++ and exposed to Python via
 the compiled ``cognivore._native`` pybind11 extension. If that extension
 isn't available -- most commonly because no C++ compiler was present when
 ``pip install`` ran -- everything downstream keeps working against a pure
 NumPy flat index instead, so the framework degrades gracefully rather than
 refusing to start.
 
-Everything else in the codebase imports ``FlatIndex``/``NSWIndex``/
+Everything else in the codebase imports ``FlatIndex``/``NSWIndex``/``HNSWIndex``/
 ``is_native`` from *this* module rather than reaching into ``_native`` or
 ``python_index`` directly, so the fallback is transparent.
 """
@@ -32,6 +31,7 @@ logger = logging.getLogger(__name__)
 # module) and treats these duck-typed, or checks `is_native` first.
 FlatIndex: Any
 NSWIndex: Any
+HNSWIndex: Any
 SearchResult: Any
 is_native: bool
 
@@ -40,6 +40,7 @@ try:
 
     FlatIndex = _native.FlatIndex
     NSWIndex = _native.NSWIndex
+    HNSWIndex = getattr(_native, "HNSWIndex", None)
     SearchResult = _native.SearchResult
     is_native = True
 except ImportError:  # pragma: no cover - exercised in CI without a compiler
@@ -51,7 +52,8 @@ except ImportError:  # pragma: no cover - exercised in CI without a compiler
     )
     FlatIndex = FlatIndexPy
     NSWIndex = None
+    HNSWIndex = None
     SearchResult = SearchResultPy
     is_native = False
 
-__all__ = ["FlatIndex", "NSWIndex", "SearchResult", "is_native"]
+__all__ = ["FlatIndex", "HNSWIndex", "NSWIndex", "SearchResult", "is_native"]

@@ -88,7 +88,7 @@ else:
 ext_modules = [
     Pybind11Extension(
         "cognivore._native",
-        ["native/bindings.cpp", "native/vector_index.cpp"],
+        ["native/bindings.cpp", "native/vector_index.cpp", "native/hnsw_index.cpp"],
         include_dirs=["native"],
         cxx_std=17,
         extra_compile_args=extra_compile_args,

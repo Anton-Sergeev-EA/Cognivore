@@ -192,10 +192,37 @@ Faiss/hnswlib's heavily-tuned multi-layer HNSW, and at small-to-medium
 collection sizes on a low core count, a SIMD+OpenMP brute-force scan can
 still beat it outright. The roadmap below tracks closing that gap.
 
+## Native HNSW
+
+`cognivore.index.HNSWIndex` exposes a separate in-memory index for cosine
+search. It samples levels geometrically, descends greedily above layer zero,
+and uses a bounded candidate search while building and querying the graph.
+Insertion adds reverse links and prunes overfull lists with a diversity
+heuristic. Layer zero allows up to `2*m` neighbors per node and upper layers
+allow up to `m`. The seed controls level sampling. The Python binding
+accepts one-dimensional arrays or numeric sequences and releases the GIL
+during search and insertion. Searches share a read lock and insertion takes
+an exclusive lock.
+
+```python
+from cognivore.index import HNSWIndex
+
+if HNSWIndex is None:
+    raise RuntimeError("Install Cognivore with its native C++ extension.")
+
+index = HNSWIndex(dim=3, m=16, ef_construction=200, seed=42)
+index.add(42, [1.0, 0.0, 0.0])
+assert index.search([0.9, 0.1, 0.0], k=1, ef=50)[0].id == 42
+```
+
+The knowledge base still uses its existing NSW persistence and NumPy
+fallback. The HNSW entry point is available for direct evaluation.
+
 ## Roadmap
 
-- [ ] Multi-layer HNSW (the current `NSWIndex` is single-layer NSW, which
-      the docstring in `native/vector_index.hpp` is explicit about).
+- [ ] Versioned HNSW persistence and knowledge-base migration.
+- [ ] Scalar and product quantization, optional ANN backends, and
+      cross-backend recall, latency and memory benchmarks.
 - [ ] Real speaker diarization (pyannote) behind the same
       `diarize_by_energy` interface, as a heavier optional extra.
 - [ ] A lightweight CPU-friendly captioning model for footage with neither
